@@ -1,18 +1,182 @@
 #include <Arduino.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
+#include "Buzzer.h"
+#include "RFID_mod.h"
+#include "WiFiConnection.h"
+#include "Credentials.h"
 
-// put function declarations here:
-int myFunction(int, int);
+// Pines
+#define SENSOR_IR_PIN 15
+#define SENSOR_PIR_PIN 13
+#define SS_PIN 21
+#define RST_PIN 22
+#define BUZZER_PIN 25
+
+// Instancias
+WiFiConnection wifi(WIFI_SSID, WIFI_PASSWORD);
+WiFiClient espClient;
+PubSubClient client(espClient);
+Buzzer buzzer(BUZZER_PIN, false);
+RFID_mod rfid(SS_PIN, RST_PIN, UID_ESPERADO);
+
+// Variables globales
+int contador = 0;
+bool lectura_RFID = false;
+bool salida = false;
+bool buzzerActivo = false;
+unsigned long tiempoInicioEvento = 0;
+unsigned long lastJsonTime = 0;
+unsigned long lastFullReportTime = 0;
+bool estado_luces = false;
+// Funciones de sensores
+int lecture_ir_sensor() { return digitalRead(SENSOR_IR_PIN); }
+int lecture_pir_sensor() { return digitalRead(SENSOR_PIR_PIN); }
+bool lecture_rfid_sensor() { return rfid.tarjetaDetectada(); }
+
+// Función para reconectar MQTT
+void reconnectMQTT() {
+    while (!client.connected()) {
+        Serial.print("Intentando conectar a MQTT...");
+        // Conexión con usuario y contraseña (Maquiato requiere esto)
+        if (client.connect("ESP32Client", MQTT_USER, MQTT_PASS)) {
+            Serial.println("✅ Conectado a MQTT.");
+            client.subscribe(MQTT_TOPIC);
+        } else {
+            Serial.print("❌ Fallo, rc=");
+            Serial.print(client.state());
+            Serial.println(" - Reintentando en 3 segundos...");
+            delay(3000);
+        }
+    }
+}
+
+//horario
+// Configuración de zona horaria y servidor NTP
+const char* ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = -5 * 3600; // GMT-5 para Colombia
+const int daylightOffset_sec = 0;    // Sin horario de verano
+
+// Enviar estado en JSON
+void sendMessage() {
+    JsonDocument doc;
+    doc["door"] = lecture_ir_sensor();
+    doc["presence"] = lecture_pir_sensor();
+    doc["card"] = lectura_RFID;
+    doc["buzzer"] = buzzer.getStatus();
+    doc["access"] = lectura_RFID;
+    doc["salida"] = salida;
+    doc["luces"] = estado_luces;
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo)) {
+        char timeString[20];
+        strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M", &timeinfo);
+        doc["date"] = timeString;
+    } else {
+        doc["date"] = "N/A";
+    }
+    char buffer[256];
+    serializeJson(doc, buffer);
+    if (client.publish(MQTT_TOPIC, buffer)) {
+        Serial.println("✅ Mensaje enviado al servidor MQTT.");
+    } else {
+        Serial.println("❌Error al enviar el mensaje.");
+    }
+}
 
 void setup() {
-  // put your setup code here, to run once:
-  int result = myFunction(2, 3);
+    Serial.begin(115200);
+    pinMode(SENSOR_IR_PIN, INPUT);
+    pinMode(SENSOR_PIR_PIN, INPUT);
+    wifi.begin();
+    rfid.begin();
+    client.setServer(MQTT_SERVER, MQTT_PORT);
+
+    // Inicializar la hora desde el servidor NTP
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+    Serial.println("⌛ Esperando sincronización NTP...");
+    
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo)) {
+        Serial.println("⏰ Tiempo sincronizado correctamente.");
+    } else {
+        Serial.println("❌ Falló la sincronización con el servidor NTP.");
+    }
 }
+
 
 void loop() {
-  // put your main code here, to run repeatedly:
-}
+    // Verificar conexión WiFi y MQTT
+    wifi.update();
+    if (!wifi.connected()) {
+        Serial.println("❌ Sin conexión WiFi.");
+        return;
+    }
 
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
+    if (!client.connected()) {
+        reconnectMQTT();
+    }
+    client.loop();
+
+    // Lectura de sensores
+    int estadoIR = lecture_ir_sensor();     // LOW = cerrada, HIGH = abierta
+    int estadoPIR = lecture_pir_sensor();   // LOW = sin presencia, HIGH = hay presencia
+    bool tarjetaDetectada = lecture_rfid_sensor();
+
+    // Contador de lecturas RFID
+    if (tarjetaDetectada) {
+        contador++;
+    } else {
+        contador = 0;
+    }
+    lectura_RFID = (contador >= 4);
+
+    // Caso 1: Tarjeta válida con puerta cerrada → Se prepara para salida
+    if (lectura_RFID && estadoIR == LOW) {
+        if (tiempoInicioEvento == 0) tiempoInicioEvento = millis();
+        if (millis() - tiempoInicioEvento >= 10000) {
+            salida = true;
+            sendMessage();
+            salida = false;
+            tiempoInicioEvento = 0;
+        }
+    }
+
+    // Caso 2: Puerta abierta sin tarjeta válida → Activar alarma
+    else if (!lectura_RFID && estadoIR == HIGH) {
+        if (tiempoInicioEvento == 0) tiempoInicioEvento = millis();
+        if (millis() - tiempoInicioEvento >= 5000) {
+            if (!buzzer.getStatus()) {
+                buzzer.setStatus(true);
+                Serial.println("🔔 Buzzer activado por puerta abierta sin tarjeta.");
+            }
+            buzzer.playTone();
+            if (millis() - lastJsonTime >= 2000) {
+                sendMessage();
+                lastJsonTime = millis();
+            }
+        }
+    }
+
+    // Caso 3: Se presenta tarjeta mientras la puerta está abierta → Apagar alarma
+    else if (lectura_RFID && estadoIR == HIGH && buzzer.getStatus()) {
+        buzzer.setStatus(false);
+        buzzer.turnOffSound();
+        Serial.println("🔕 Buzzer desactivado por tarjeta válida.");
+        buzzer.setStatus(false);
+        sendMessage();
+        tiempoInicioEvento = 0;
+    }
+
+    // Reset si ninguna condición especial
+    else {
+        tiempoInicioEvento = 0;
+        buzzer.turnOffSound();  // evitar sonido residual
+    }
+
+    // Reporte general cada 4s
+    if (millis() - lastFullReportTime >= 4000) {
+        sendMessage();
+        lastFullReportTime = millis();
+    }
 }
