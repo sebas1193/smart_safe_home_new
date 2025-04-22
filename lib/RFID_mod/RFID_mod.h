@@ -1,3 +1,4 @@
+//RFID _mod.h
 #ifndef RFID_MOD_H
 #define RFID_MOD_H
 
@@ -34,10 +35,11 @@ private:
     bool compararUID() {
         for (byte i = 0; i < mfrc522.uid.size; i++) {
             if (mfrc522.uid.uidByte[i] != uidEsperado[i]) {
+                Serial.println("¡❌ Tarjeta Incorrecta!");
                 return false;
             }
         }
-        Serial.println("¡Tarjeta correcta!");
+        Serial.println("¡✅ Tarjeta correcta!");
         return true;
     }
 };
