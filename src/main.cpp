@@ -28,7 +28,7 @@ bool buzzerActivo = false;
 unsigned long tiempoInicioEvento = 0;
 unsigned long lastJsonTime = 0;
 unsigned long lastFullReportTime = 0;
-
+bool estado_luces = false;
 // Funciones de sensores
 int lecture_ir_sensor() { return digitalRead(SENSOR_IR_PIN); }
 int lecture_pir_sensor() { return digitalRead(SENSOR_PIR_PIN); }
@@ -51,6 +51,11 @@ void reconnectMQTT() {
     }
 }
 
+//horario
+// Configuración de zona horaria y servidor NTP
+const char* ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = -5 * 3600; // GMT-5 para Colombia
+const int daylightOffset_sec = 0;    // Sin horario de verano
 
 // Enviar estado en JSON
 void sendMessage() {
@@ -58,15 +63,25 @@ void sendMessage() {
     doc["door"] = lecture_ir_sensor();
     doc["presence"] = lecture_pir_sensor();
     doc["card"] = lectura_RFID;
-    doc["Buzzer"] = buzzer.getStatus();
+    doc["buzzer"] = buzzer.getStatus();
     doc["access"] = lectura_RFID;
     doc["salida"] = salida;
-
+    doc["luces"] = estado_luces;
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo)) {
+        char timeString[20];
+        strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M", &timeinfo);
+        doc["date"] = timeString;
+    } else {
+        doc["date"] = "N/A";
+    }
     char buffer[256];
     serializeJson(doc, buffer);
-    client.publish(MQTT_TOPIC, buffer);
-    Serial.println("📤 Mensaje enviado:");
-    Serial.println(buffer);
+    if (client.publish(MQTT_TOPIC, buffer)) {
+        Serial.println("✅ Mensaje enviado al servidor MQTT.");
+    } else {
+        Serial.println("❌Error al enviar el mensaje.");
+    }
 }
 
 void setup() {
@@ -76,7 +91,19 @@ void setup() {
     wifi.begin();
     rfid.begin();
     client.setServer(MQTT_SERVER, MQTT_PORT);
+
+    // Inicializar la hora desde el servidor NTP
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+    Serial.println("⌛ Esperando sincronización NTP...");
+    
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo)) {
+        Serial.println("⏰ Tiempo sincronizado correctamente.");
+    } else {
+        Serial.println("❌ Falló la sincronización con el servidor NTP.");
+    }
 }
+
 
 void loop() {
     // Verificar conexión WiFi y MQTT
