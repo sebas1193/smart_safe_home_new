@@ -1,0 +1,58 @@
+CREATE TABLE front_door (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    id_node VARCHAR(255) NOT NULL,
+    door BOOLEAN NOT NULL,
+    buzzer BOOLEAN NOT NULL,
+    identification BOOLEAN NOT NULL,
+    date DATETIME NOT NULL
+);
+
+
+CREATE TABLE living_room (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    id_node VARCHAR(255) NOT NULL,
+    presence BOOLEAN NOT NULL,
+    lights BOOLEAN NOT NULL,
+    date DATETIME NOT NULL
+);
+
+CREATE TABLE kitchen (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    id_node VARCHAR(255) NOT NULL,
+    temperature FLOAT NOT NULL,
+    humidity FLOAT NOT NULL,
+    gas INT NOT NULL,
+    date DATETIME NOT NULL
+);
+
+CREATE TABLE status_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    id_node VARCHAR(255) NOT NULL,
+    status_alert INT NOT NULL,
+    location VARCHAR(100) NOT NULL,
+    date DATETIME NOT NULL
+);
+
+CREATE TABLE owner (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    email VARCHAR(50) NOT NULL UNIQUE,
+    user_name VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    address VARCHAR(100) NOT NULL,
+    date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE emergency_contact (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    email VARCHAR(50),
+    address VARCHAR(100),
+    id_owner INT NOT NULL,
+    FOREIGN KEY (id_owner) REFERENCES owner(id),
+    date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
