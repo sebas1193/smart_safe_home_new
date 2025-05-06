@@ -1,3 +1,4 @@
 .pio
 .vscode/*
 lib/Credentials/*.h
+.env
