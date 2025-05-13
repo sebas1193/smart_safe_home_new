@@ -2,3 +2,5 @@
 .vscode/*
 lib/Credentials/*.h
 .env
+node_modules/
+package-lock.json
