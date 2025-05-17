@@ -14,7 +14,7 @@
 #define RST_PIN 22
 #define BUZZER_PIN 25
 #define LED_PIN 2
-#define BUTTON_LIGHTS_PIN 23
+#define BUTTON_LIGHTS_PIN 5
 
 // Instancias
 WiFiConnection wifi(WIFI_SSID, WIFI_PASSWORD);
@@ -29,7 +29,7 @@ const long gmtOffset_sec = -5 * 3600; // Colombia
 const int daylightOffset_sec = 0;
 
 // Variables
-int id_nodo = 1;
+const char* id_nodo = "NODE_A";
 bool status_identification = false;
 int status_IR = LOW;
 int status_PIR = LOW;
@@ -75,7 +75,7 @@ void reconnectMQTT() {
 // JSON Main
 void sendMainMessage() {
     JsonDocument doc;
-    doc["id"] = id_nodo;
+    doc["id_node"] = id_nodo;
     doc["door"] = status_IR;
     doc["buzzer"] = buzzer.getStatus();
     doc["identification"] = status_identification;
@@ -83,9 +83,9 @@ void sendMainMessage() {
     if (getLocalTime(&timeinfo)) {
         char timeString[20];
         strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M", &timeinfo);
-        doc["date"] = timeString;
+        doc["sent_at"] = timeString;
     } else {
-        doc["date"] = "N/A";
+        doc["sent_at"] = "N/A";
     }
     char buffer[256];
     serializeJson(doc, buffer);
@@ -96,16 +96,16 @@ void sendMainMessage() {
 // JSON Secundario
 void sendSecondaryMessage() {
     JsonDocument doc;
-    doc["id"] = id_nodo;
+    doc["id_node"] = id_nodo;
     doc["presence"] = status_PIR;
     doc["lights"] = status_lights;
     struct tm timeinfo;
     if (getLocalTime(&timeinfo)) {
         char timeString[20];
         strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M", &timeinfo);
-        doc["date"] = timeString;
+        doc["sent_at"] = timeString;
     } else {
-        doc["date"] = "N/A";
+        doc["sent_at"] = "N/A";
     }
     char buffer[256];
     serializeJson(doc, buffer);
