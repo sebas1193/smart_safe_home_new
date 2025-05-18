@@ -30,6 +30,7 @@ const int daylightOffset_sec = 0;
 
 // Variables de estado
 const char* id_nodo = "NODE_A";
+const char* id_nodo2 = "NODE_A1";
 bool status_identification = false;
 int status_IR = LOW;
 int status_PIR = LOW;
@@ -212,7 +213,7 @@ void sendMainMessage() {
 
 void sendSecondaryMessage() {
   JsonDocument doc;
-  doc["id_node"] = id_nodo;
+  doc["id_node"] = id_nodo2;
   doc["presence"] = status_PIR;
   doc["lights"] = status_lights ? 1 : 0;
   doc["manual_on"] = manual_on;
