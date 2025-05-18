@@ -75,6 +75,13 @@ bool forzadoPorMQTT = false; // Control para comandos MQTT
 unsigned long ultimoPulsador = 0; // Para debounce del botón
 bool estadoAnteriorPulsador = HIGH; // Estado previo del pulsador (con pull-up)
 
+// Nuevas variables para reportar estado detallado de luces
+bool manual_on = false;
+bool manual_off = false;
+bool auto_mode = true;
+bool remote_on = false;
+bool remote_off = false;
+
 // Lecturas
 int lecture_ir_sensor() { return digitalRead(SENSOR_IR_PIN); }
 int lecture_pir_sensor() { return digitalRead(SENSOR_PIR_PIN); }
@@ -83,6 +90,36 @@ bool lecture_rfid_sensor() { return rfid.tarjetaDetectada(); }
 // Declaraciones de funciones (forward declarations)
 void sendMainMessage();
 void sendSecondaryMessage();
+void updateLightStates();
+
+// Función para actualizar estados de luz basados en el modo actual
+void updateLightStates() {
+  // Actualizar variables de estado según el modo actual
+  if (forzadoPorMQTT) {
+    remote_on = (modoLuz == MODO_ENCENDIDO);
+    remote_off = (modoLuz == MODO_APAGADO);
+    manual_on = false;
+    manual_off = false;
+    auto_mode = false;
+  } else {
+    remote_on = false;
+    remote_off = false;
+    
+    if (modoLuz == MODO_PIR) {
+      auto_mode = true;
+      manual_on = false;
+      manual_off = false;
+    } else if (modoLuz == MODO_ENCENDIDO) {
+      auto_mode = false;
+      manual_on = true;
+      manual_off = false;
+    } else if (modoLuz == MODO_APAGADO) {
+      auto_mode = false;
+      manual_on = false;
+      manual_off = true;
+    }
+  }
+}
 
 // Callback para MQTT
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -98,7 +135,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println(message);
   
   // Parsear JSON
-  JsonDocument doc;  // Actualizamos a la nueva sintaxis
+  JsonDocument doc;
   DeserializationError error = deserializeJson(doc, message);
   
   if (error) {
@@ -107,22 +144,26 @@ void callback(char* topic, byte* payload, unsigned int length) {
     return;
   }
   
-  // Procesar control de luces
-  if (doc.containsKey("turn_off")) {  // Mantener por ahora, luego actualizar
-    if (doc["turn_off"] == 1) {
-      // Forzar apagado permanente
-      forzadoPorMQTT = true;
-      modoLuz = MODO_APAGADO;
-      digitalWrite(LED_PIN, LOW);
-      status_lights = false;
-      Serial.println("💡 Luces forzadas a OFF por MQTT");
-      sendSecondaryMessage();
-    } else if (doc["turn_off"] == 0) {
-      // Restaurar control normal por PIR
-      forzadoPorMQTT = false;
-      modoLuz = MODO_PIR;
-      Serial.println("💡 Luces restauradas a modo PIR por MQTT");
-      sendSecondaryMessage();
+  // Procesar control de luces - verificamos si es el tópico de control
+  if (strcmp(topic, MQTT_TOPIC3) == 0) {
+    if (doc.containsKey("turn_off")) {
+      if (doc["turn_off"] == 1) {
+        // Forzar apagado permanente
+        forzadoPorMQTT = true;
+        modoLuz = MODO_APAGADO;
+        digitalWrite(LED_PIN, LOW);
+        status_lights = false;
+        Serial.println("💡 Luces forzadas a OFF por MQTT");
+        updateLightStates();
+        sendSecondaryMessage();
+      } else if (doc["turn_off"] == 0) {
+        // Restaurar control normal por PIR
+        forzadoPorMQTT = false;
+        modoLuz = MODO_PIR;
+        Serial.println("💡 Luces restauradas a modo PIR por MQTT");
+        updateLightStates();
+        sendSecondaryMessage();
+      }
     }
   }
 }
@@ -133,7 +174,10 @@ void reconnectMQTT() {
     Serial.print("Intentando conectar a MQTT...");
     if (client.connect("ESP32Client", MQTT_USER, MQTT_PASS)) {
       Serial.println("✅ Conectado a MQTT.");
-      client.subscribe(MQTT_TOPIC);
+      client.subscribe(MQTT_TOPIC); // Tópico principal
+      client.subscribe(MQTT_TOPIC3); // Nuevo tópico para control de luces
+      Serial.println("Suscrito a tópico principal: " + String(MQTT_TOPIC));
+      Serial.println("Suscrito a tópico de control de luces: " + String(MQTT_TOPIC3));
     } else {
       Serial.print("❌ Fallo, rc=");
       Serial.print(client.state());
@@ -154,7 +198,7 @@ String getTimestamp() {
 
 // Envío JSON genérico
 void sendMainMessage() {
-  JsonDocument doc;  // Actualizamos a la nueva sintaxis
+  JsonDocument doc;
   doc["id_node"] = id_nodo;
   doc["door"] = status_IR;
   doc["buzzer"] = buzzer.getStatus();
@@ -167,10 +211,15 @@ void sendMainMessage() {
 }
 
 void sendSecondaryMessage() {
-  JsonDocument doc;  // Actualizamos a la nueva sintaxis
+  JsonDocument doc;
   doc["id_node"] = id_nodo;
   doc["presence"] = status_PIR;
-  doc["lights"] = status_lights;
+  doc["lights"] = status_lights ? 1 : 0;
+  doc["manual_on"] = manual_on;
+  doc["manual_off"] = manual_off;
+  doc["auto"] = auto_mode;
+  doc["remote_on"] = remote_on;
+  doc["remote_off"] = remote_off;
   doc["sent_at"] = getTimestamp();
   char buffer[256];
   serializeJson(doc, buffer);
@@ -185,10 +234,17 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   pinMode(BUTTON_LIGHTS_PIN, INPUT_PULLUP);
 
+  // Inicializar estados de luces
+  auto_mode = true;
+  manual_on = false;
+  manual_off = false;
+  remote_on = false;
+  remote_off = false;
+
   wifi.begin();
   rfid.begin();
   client.setServer(MQTT_SERVER, MQTT_PORT);
-  client.setCallback(callback);  // Añadir callback para procesar mensajes
+  client.setCallback(callback);
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
   // Esperar NTP
@@ -198,6 +254,11 @@ void setup() {
     delay(500);
   }
   Serial.println("✅ Hora sincronizada: " + getTimestamp());
+  
+  // Imprimir información de tópicos
+  Serial.println("Tópico principal (suscripción): " + String(MQTT_TOPIC));
+  Serial.println("Tópico de control de luces (suscripción): " + String(MQTT_TOPIC3));
+  Serial.println("Tópico secundario (publicación): " + String(MQTT_TOPIC2));
 }
 
 void loop() {
@@ -251,7 +312,10 @@ void loop() {
             status_lights = false;
             break;
         }
-        sendSecondaryMessage(); // Enviar cambio de estado
+        
+        // Actualizar estados de control y enviar mensaje
+        updateLightStates();
+        sendSecondaryMessage();
       }
     }
     ultimoPulsador = now;
@@ -421,6 +485,7 @@ void loop() {
 
   // Envío por cambios de estado secundario
   if (status_PIR != last_PIR || status_lights != last_lights) {
+    updateLightStates(); // Asegurar que los estados están actualizados
     sendSecondaryMessage();
     last_PIR = status_PIR;
     last_lights = status_lights;
