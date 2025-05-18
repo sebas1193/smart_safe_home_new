@@ -1,4 +1,4 @@
-// main.cpp - Versión actualizada según especificaciones
+// main.cpp - Versión revisada con corrección de lógica de ventana de gracia
 #include <Arduino.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
@@ -58,6 +58,14 @@ unsigned long lastSend = 0;
 // Tiempo para resetear la identificación después de una lectura exitosa
 unsigned long tiempoIdentificacion = 0;
 const unsigned long TIMEOUT_IDENTIFICACION = 5000; // 5 segundos para resetear el estado
+
+// Nueva variable para controlar ventana de gracia para salida
+bool enVentanaGracia = false;
+unsigned long inicioVentanaGracia = 0;
+const unsigned long TIEMPO_VENTANA_GRACIA = 7000; // 7 segundos de ventana de gracia
+
+// Para controlar si una alarma fue cancelada con identificación
+bool alarmaCancelada = false;
 
 // Lecturas
 int lecture_ir_sensor() { return digitalRead(SENSOR_IR_PIN); }
@@ -172,78 +180,139 @@ void loop() {
 
     // === Detección de puerta y UID ===
     status_IR = ir;
-    
+
+    // === IMPORTANTE: Silenciar buzzer siempre que se detecte un UID válido ===
+    if (rfid_ok) {
+        status_identification = true;
+        tiempoIdentificacion = now;
+        buzzer.setStatus(false);
+        buzzer.turnOffSound();
+        alarmaCancelada = true;  // Marcar que una alarma fue cancelada con identificación
+    }
+
+    // === NUEVO: Lectura previa de UID con puerta cerrada ===
+    if (ir == LOW && !puertaAbierta && !enVentanaGracia && rfid_ok) {
+        // Se detectó UID válido con puerta cerrada, iniciar ventana de gracia
+        enVentanaGracia = true;
+        inicioVentanaGracia = now;
+        Serial.println("Salida autorizada");
+        sendMainMessage(); // Notificar cambio de estado
+    }
+
+    // === Control de ventana de gracia para salida ===
+    if (enVentanaGracia) {
+        // Si la puerta se abre durante la ventana de gracia
+        if (ir == HIGH && !puertaAbierta) {
+            puertaAbierta = true;
+            tiempoApertura = now;
+        }
+        
+        // Si la puerta se cierra durante la ventana de gracia, todo correcto
+        if (puertaAbierta && ir == LOW) {
+            puertaAbierta = false;
+            enVentanaGracia = false; // Fin de ventana de gracia, todo correcto
+            Serial.println("Salida completada correctamente");
+            sendMainMessage(); // Notificar salida correcta
+        }
+        
+        // Si pasan 7s y no se completó el ciclo abrir/cerrar
+        if (now - inicioVentanaGracia >= TIEMPO_VENTANA_GRACIA) {
+            // Si la puerta sigue abierta, mantener la ventana de gracia
+            if (puertaAbierta) {
+                // No hacemos nada, se esperará a que se cierre la puerta
+            } else {
+                // Si la puerta nunca se abrió y está cerrada
+                enVentanaGracia = false;
+                // NO activamos alarma aquí, solo cancelamos la ventana de gracia
+                Serial.println("⚠️ Ventana de gracia finalizada sin apertura de puerta");
+                sendMainMessage();
+            }
+        }
+    }
+
     // === CORRECCIÓN: Control de reset de identificación ===
-    // Resetear identificación después de un tiempo si la puerta está cerrada
-    if (status_identification && ir == LOW && (now - tiempoIdentificacion >= TIMEOUT_IDENTIFICACION)) {
+    // Resetear identificación después de un tiempo si la puerta está cerrada, no estamos en ventana de gracia
+    // y no hubo una cancelación de alarma reciente
+    if (status_identification && ir == LOW && !enVentanaGracia && 
+        (now - tiempoIdentificacion >= TIMEOUT_IDENTIFICACION) && !alarmaCancelada) {
         status_identification = false;
         Serial.println("🔄 Identificación reseteada por timeout");
         sendMainMessage(); // Notificar cambio de estado
     }
-    
-    // Apertura inicial
-    if (ir == HIGH && !puertaAbierta) {
+
+    // Resetear flag de alarma cancelada después del timeout de identificación
+    if (alarmaCancelada && (now - tiempoIdentificacion >= TIMEOUT_IDENTIFICACION)) {
+        alarmaCancelada = false;
+    }
+
+    // Apertura inicial (cuando no hay identificación previa o ventana de gracia)
+    if (ir == HIGH && !puertaAbierta && !enVentanaGracia) {
         puertaAbierta = true;
         tiempoApertura = now;
         enVentana3s = false;
-        // CORRECCIÓN: Reset de identificación al abrir la puerta nuevamente
-        status_identification = false;
-    }
-    
-    // Si permanece abierta >7s activa alarma
-    if (puertaAbierta && !status_identification && (now - tiempoApertura >= 7000)) {
-        buzzer.setStatus(true);
-        buzzer.playTone();
-        if (now - lastSend >= 2000) {
-            sendMainMessage();
-            lastSend = now;
-        }
-    }
-    
-    // Cierre de puerta
-    if (puertaAbierta && ir == LOW) {
-        // Si aún no estuvo en ventana de 3s y no pasó 7s, iniciar ventana 3s
-        if (!enVentana3s && (now - tiempoApertura < 7000)) {
-            enVentana3s = true;
-            inicioVentana3s = now;
-        }
         
-        // Silenciar buzzer con UID válido en cierre (cualquier momento)
-        if (rfid_ok) {
-            status_identification = true;
-            tiempoIdentificacion = now; // Registrar cuándo se hizo la identificación
-            buzzer.setStatus(false);
-            buzzer.turnOffSound();
-            Serial.println(rfid_ok && enVentana3s ? "Ingreso autorizado" : "Salida autorizada");
-            sendMainMessage();
+        // No resetear identificación aquí si estamos en proceso de salida
+        if (!status_identification) {
+            // Si no hay identificación previa, preparar para posible alarma
+            buzzer.setStatus(false); // Asegurar que el buzzer está apagado al inicio
         }
-        puertaAbierta = false;
     }
-    
-    // Ventana de 3s para UID
-    if (enVentana3s && !status_identification) {
-        if (rfid_ok) {
-            status_identification = true;
-            tiempoIdentificacion = now; // Registrar cuándo se hizo la identificación
-            buzzer.setStatus(false);
-            Serial.println("Ingreso autorizado");
-            sendMainMessage();
-            enVentana3s = false;
-        } else if (now - inicioVentana3s >= 3000) {
+
+    // Si permanece abierta >7s sin identificación y no estamos en ventana de gracia, activa alarma
+    if (puertaAbierta && !status_identification && !enVentanaGracia && (now - tiempoApertura >= 7000)) {
+        // Solo activar el buzzer si no se ha identificado y no hubo una cancelación reciente
+        if (!rfid_ok && !alarmaCancelada) {
             buzzer.setStatus(true);
             buzzer.playTone();
             if (now - lastSend >= 2000) {
                 sendMainMessage();
                 lastSend = now;
             }
+        }
+    }
+
+    // Cierre de puerta (cuando no estamos en ventana de gracia)
+    if (puertaAbierta && ir == LOW && !enVentanaGracia) {
+        // Si aún no estuvo en ventana de 3s y no pasó 7s, iniciar ventana 3s
+        if (!enVentana3s && (now - tiempoApertura < 7000) && !status_identification) {
+            enVentana3s = true;
+            inicioVentana3s = now;
+        }
+        
+        // La detección de UID ya se maneja al principio del loop
+        if (rfid_ok) {
+            Serial.println("Ingreso autorizado");
+            sendMainMessage();
+        }
+        puertaAbierta = false;
+    }
+
+    // Ventana de 3s para UID (ingreso regular)
+    if (enVentana3s && !status_identification) {
+        if (rfid_ok) {
+            // La identificación y buzzer ya se manejan al principio
+            Serial.println("Ingreso autorizado");
+            sendMainMessage();
+            enVentana3s = false;
+        } else if (now - inicioVentana3s >= 3000) {
+            // Solo activar buzzer si no hay UID y no hubo cancelación reciente
+            if (!rfid_ok && !alarmaCancelada) {
+                buzzer.setStatus(true);
+                buzzer.playTone();
+                if (now - lastSend >= 2000) {
+                    sendMainMessage();
+                    lastSend = now;
+                }
+            }
             enVentana3s = false;
         }
     }
 
     // === Envío por cambios de estado ===
-    // Buzzer alterna tono
+    // Buzzer alterna tono solo si está activo
     if (buzzer.getStatus()) buzzer.sound();
 
+    // Envío por cambios de estado principal
     if (status_identification != last_identification ||
         status_IR != last_IR ||
         buzzer.getStatus() != last_buzzer) {
@@ -252,6 +321,8 @@ void loop() {
         last_IR = status_IR;
         last_buzzer = buzzer.getStatus();
     }
+
+    // Envío por cambios de estado secundario
     if (status_PIR != last_PIR || status_lights != last_lights) {
         sendSecondaryMessage();
         last_PIR = status_PIR;
