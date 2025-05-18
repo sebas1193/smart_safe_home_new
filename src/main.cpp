@@ -1,4 +1,4 @@
-// main.cpp - Versión revisada con corrección de lógica de ventana de gracia
+// main.cpp - Versión con control de luces completo
 #include <Arduino.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
@@ -44,7 +44,6 @@ bool last_lights = false;
 
 // Temporizadores
 unsigned long tiempoInicioLuces = 0;
-bool lucesForzadas = false;
 
 // Identificación y alarma
 bool puertaAbierta = false;
@@ -59,7 +58,7 @@ unsigned long lastSend = 0;
 unsigned long tiempoIdentificacion = 0;
 const unsigned long TIMEOUT_IDENTIFICACION = 5000; // 5 segundos para resetear el estado
 
-// Nueva variable para controlar ventana de gracia para salida
+// Variable para controlar ventana de gracia para salida
 bool enVentanaGracia = false;
 unsigned long inicioVentanaGracia = 0;
 const unsigned long TIEMPO_VENTANA_GRACIA = 7000; // 7 segundos de ventana de gracia
@@ -67,265 +66,363 @@ const unsigned long TIEMPO_VENTANA_GRACIA = 7000; // 7 segundos de ventana de gr
 // Para controlar si una alarma fue cancelada con identificación
 bool alarmaCancelada = false;
 
+// Estados para el control de luces
+#define MODO_PIR 0         // Modo normal: PIR enciende por 30 segundos
+#define MODO_ENCENDIDO 1   // Forzado encendido permanente
+#define MODO_APAGADO 2     // Forzado apagado permanente
+int modoLuz = MODO_PIR;    // Inicialmente en modo PIR
+bool forzadoPorMQTT = false; // Control para comandos MQTT
+unsigned long ultimoPulsador = 0; // Para debounce del botón
+bool estadoAnteriorPulsador = HIGH; // Estado previo del pulsador (con pull-up)
+
 // Lecturas
 int lecture_ir_sensor() { return digitalRead(SENSOR_IR_PIN); }
 int lecture_pir_sensor() { return digitalRead(SENSOR_PIR_PIN); }
 bool lecture_rfid_sensor() { return rfid.tarjetaDetectada(); }
-bool lecture_button_lights() { return digitalRead(BUTTON_LIGHTS_PIN); }
+
+// Declaraciones de funciones (forward declarations)
+void sendMainMessage();
+void sendSecondaryMessage();
+
+// Callback para MQTT
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("📩 Mensaje recibido [");
+  Serial.print(topic);
+  Serial.print("] ");
+  
+  // Convertir payload a string
+  String message;
+  for (int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
+  Serial.println(message);
+  
+  // Parsear JSON
+  JsonDocument doc;  // Actualizamos a la nueva sintaxis
+  DeserializationError error = deserializeJson(doc, message);
+  
+  if (error) {
+    Serial.print("❌ Error deserializando JSON: ");
+    Serial.println(error.c_str());
+    return;
+  }
+  
+  // Procesar control de luces
+  if (doc.containsKey("turn_off")) {  // Mantener por ahora, luego actualizar
+    if (doc["turn_off"] == 1) {
+      // Forzar apagado permanente
+      forzadoPorMQTT = true;
+      modoLuz = MODO_APAGADO;
+      digitalWrite(LED_PIN, LOW);
+      status_lights = false;
+      Serial.println("💡 Luces forzadas a OFF por MQTT");
+      sendSecondaryMessage();
+    } else if (doc["turn_off"] == 0) {
+      // Restaurar control normal por PIR
+      forzadoPorMQTT = false;
+      modoLuz = MODO_PIR;
+      Serial.println("💡 Luces restauradas a modo PIR por MQTT");
+      sendSecondaryMessage();
+    }
+  }
+}
 
 // Reconexión MQTT
 void reconnectMQTT() {
-    while (!client.connected()) {
-        Serial.print("Intentando conectar a MQTT...");
-        if (client.connect("ESP32Client", MQTT_USER, MQTT_PASS)) {
-            Serial.println("✅ Conectado a MQTT.");
-            client.subscribe(MQTT_TOPIC);
-        } else {
-            Serial.print("❌ Fallo, rc=");
-            Serial.print(client.state());
-            Serial.println(" - Reintentando...");
-            delay(3000);
-        }
+  while (!client.connected()) {
+    Serial.print("Intentando conectar a MQTT...");
+    if (client.connect("ESP32Client", MQTT_USER, MQTT_PASS)) {
+      Serial.println("✅ Conectado a MQTT.");
+      client.subscribe(MQTT_TOPIC);
+    } else {
+      Serial.print("❌ Fallo, rc=");
+      Serial.print(client.state());
+      Serial.println(" - Reintentando...");
+      delay(3000);
     }
+  }
 }
 
 // Formateo de fecha
 String getTimestamp() {
-    struct tm timeinfo;
-    if (!getLocalTime(&timeinfo)) return "N/A";
-    char buf[20];
-    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
-    return String(buf);
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) return "N/A";
+  char buf[20];
+  strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
+  return String(buf);
 }
 
 // Envío JSON genérico
 void sendMainMessage() {
-    StaticJsonDocument<256> doc;
-    doc["id_node"] = id_nodo;
-    doc["door"] = status_IR;
-    doc["buzzer"] = buzzer.getStatus();
-    doc["identification"] = status_identification;
-    doc["sent_at"] = getTimestamp();
-    char buffer[256];
-    serializeJson(doc, buffer);
-    client.publish(MQTT_TOPIC, buffer);
-    Serial.println("📤 Main JSON enviado: " + String(buffer));
+  JsonDocument doc;  // Actualizamos a la nueva sintaxis
+  doc["id_node"] = id_nodo;
+  doc["door"] = status_IR;
+  doc["buzzer"] = buzzer.getStatus();
+  doc["identification"] = status_identification;
+  doc["sent_at"] = getTimestamp();
+  char buffer[256];
+  serializeJson(doc, buffer);
+  client.publish(MQTT_TOPIC, buffer);
+  Serial.println("📤 Main JSON enviado: " + String(buffer));
 }
 
 void sendSecondaryMessage() {
-    StaticJsonDocument<256> doc;
-    doc["id_node"] = id_nodo;
-    doc["presence"] = status_PIR;
-    doc["lights"] = status_lights;
-    doc["sent_at"] = getTimestamp();
-    char buffer[256];
-    serializeJson(doc, buffer);
-    client.publish(MQTT_TOPIC2, buffer);
-    Serial.println("📤 Secondary JSON enviado: " + String(buffer));
+  JsonDocument doc;  // Actualizamos a la nueva sintaxis
+  doc["id_node"] = id_nodo;
+  doc["presence"] = status_PIR;
+  doc["lights"] = status_lights;
+  doc["sent_at"] = getTimestamp();
+  char buffer[256];
+  serializeJson(doc, buffer);
+  client.publish(MQTT_TOPIC2, buffer);
+  Serial.println("📤 Secondary JSON enviado: " + String(buffer));
 }
 
 void setup() {
-    Serial.begin(115200);
-    pinMode(SENSOR_IR_PIN, INPUT);
-    pinMode(SENSOR_PIR_PIN, INPUT);
-    pinMode(LED_PIN, OUTPUT);
-    pinMode(BUTTON_LIGHTS_PIN, INPUT_PULLUP);
+  Serial.begin(115200);
+  pinMode(SENSOR_IR_PIN, INPUT);
+  pinMode(SENSOR_PIR_PIN, INPUT);
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(BUTTON_LIGHTS_PIN, INPUT_PULLUP);
 
-    wifi.begin();
-    rfid.begin();
-    client.setServer(MQTT_SERVER, MQTT_PORT);
-    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  wifi.begin();
+  rfid.begin();
+  client.setServer(MQTT_SERVER, MQTT_PORT);
+  client.setCallback(callback);  // Añadir callback para procesar mensajes
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
-    // Esperar NTP
-    Serial.println("⌛ Sincronizando hora NTP...");
-    struct tm timeinfo;
-    while (!getLocalTime(&timeinfo)) {
-        delay(500);
-    }
-    Serial.println("✅ Hora sincronizada: " + getTimestamp());
+  // Esperar NTP
+  Serial.println("⌛ Sincronizando hora NTP...");
+  struct tm timeinfo;
+  while (!getLocalTime(&timeinfo)) {
+    delay(500);
+  }
+  Serial.println("✅ Hora sincronizada: " + getTimestamp());
 }
 
 void loop() {
-    wifi.update();
-    if (!wifi.connected()) return;
+  wifi.update();
+  if (!wifi.connected()) return;
 
-    if (!client.connected()) reconnectMQTT();
-    client.loop();
+  if (!client.connected()) {
+    reconnectMQTT();
+  }
+  client.loop();
 
-    // Actualizar sensores
-    int ir = lecture_ir_sensor();
-    int pir = lecture_pir_sensor();
-    bool rfid_ok = lecture_rfid_sensor();
-    bool btn = lecture_button_lights();
+  // Actualizar sensores
+  int ir = lecture_ir_sensor();
+  int pir = lecture_pir_sensor();
+  bool rfid_ok = lecture_rfid_sensor();
+  unsigned long now = millis();
+  
+  // === Control PIR/luces con tres estados ===
+  bool btnActual = !digitalRead(BUTTON_LIGHTS_PIN); // Invertimos porque es INPUT_PULLUP
 
-    unsigned long now = millis();
-
-    // === Control PIR/luces ===
-    if (pir == HIGH && !lucesForzadas) {
-        digitalWrite(LED_PIN, HIGH);
-        status_lights = true;
-        tiempoInicioLuces = now;
-    }
-    if (btn) {
-        digitalWrite(LED_PIN, HIGH);
-        status_lights = true;
-        lucesForzadas = true;
-        tiempoInicioLuces = 0;
-    }
-    if (!btn && lucesForzadas) lucesForzadas = false;
-    if (status_lights && !lucesForzadas && (now - tiempoInicioLuces >= 30000)) {
-        digitalWrite(LED_PIN, LOW);
-        status_lights = false;
-    }
-
-    // === Detección de puerta y UID ===
-    status_IR = ir;
-
-    // === IMPORTANTE: Silenciar buzzer siempre que se detecte un UID válido ===
-    if (rfid_ok) {
-        status_identification = true;
-        tiempoIdentificacion = now;
-        buzzer.setStatus(false);
-        buzzer.turnOffSound();
-        alarmaCancelada = true;  // Marcar que una alarma fue cancelada con identificación
-    }
-
-    // === NUEVO: Lectura previa de UID con puerta cerrada ===
-    if (ir == LOW && !puertaAbierta && !enVentanaGracia && rfid_ok) {
-        // Se detectó UID válido con puerta cerrada, iniciar ventana de gracia
-        enVentanaGracia = true;
-        inicioVentanaGracia = now;
-        Serial.println("Salida autorizada");
-        sendMainMessage(); // Notificar cambio de estado
-    }
-
-    // === Control de ventana de gracia para salida ===
-    if (enVentanaGracia) {
-        // Si la puerta se abre durante la ventana de gracia
-        if (ir == HIGH && !puertaAbierta) {
-            puertaAbierta = true;
-            tiempoApertura = now;
-        }
+  // Control de botón con debounce
+  if (btnActual != estadoAnteriorPulsador && (now - ultimoPulsador > 50)) { // 50ms debounce
+    if (btnActual == true) { // Solo en flanco de bajada (presionar botón)
+      // Si no está forzado por MQTT, cambiamos modo
+      if (!forzadoPorMQTT) {
+        // Ciclar entre los tres modos
+        modoLuz = (modoLuz + 1) % 3;
         
-        // Si la puerta se cierra durante la ventana de gracia, todo correcto
-        if (puertaAbierta && ir == LOW) {
-            puertaAbierta = false;
-            enVentanaGracia = false; // Fin de ventana de gracia, todo correcto
-            Serial.println("Salida completada correctamente");
-            sendMainMessage(); // Notificar salida correcta
-        }
-        
-        // Si pasan 7s y no se completó el ciclo abrir/cerrar
-        if (now - inicioVentanaGracia >= TIEMPO_VENTANA_GRACIA) {
-            // Si la puerta sigue abierta, mantener la ventana de gracia
-            if (puertaAbierta) {
-                // No hacemos nada, se esperará a que se cierre la puerta
+        Serial.print("💡 Cambio de modo a: ");
+        switch (modoLuz) {
+          case MODO_ENCENDIDO:
+            Serial.println("Encendido permanente");
+            digitalWrite(LED_PIN, HIGH);
+            status_lights = true;
+            break;
+          case MODO_PIR:
+            Serial.println("Control por PIR");
+            // Verificar si hay movimiento actual
+            if (pir == HIGH) {
+              digitalWrite(LED_PIN, HIGH);
+              status_lights = true;
+              tiempoInicioLuces = now;
             } else {
-                // Si la puerta nunca se abrió y está cerrada
-                enVentanaGracia = false;
-                // NO activamos alarma aquí, solo cancelamos la ventana de gracia
-                Serial.println("⚠️ Ventana de gracia finalizada sin apertura de puerta");
-                sendMainMessage();
+              digitalWrite(LED_PIN, LOW);
+              status_lights = false;
             }
+            break;
+          case MODO_APAGADO:
+            Serial.println("Apagado permanente");
+            digitalWrite(LED_PIN, LOW);
+            status_lights = false;
+            break;
         }
+        sendSecondaryMessage(); // Enviar cambio de estado
+      }
     }
+    ultimoPulsador = now;
+  }
+  estadoAnteriorPulsador = btnActual;
 
-    // === CORRECCIÓN: Control de reset de identificación ===
-    // Resetear identificación después de un tiempo si la puerta está cerrada, no estamos en ventana de gracia
-    // y no hubo una cancelación de alarma reciente
-    if (status_identification && ir == LOW && !enVentanaGracia && 
-        (now - tiempoIdentificacion >= TIMEOUT_IDENTIFICACION) && !alarmaCancelada) {
-        status_identification = false;
-        Serial.println("🔄 Identificación reseteada por timeout");
-        sendMainMessage(); // Notificar cambio de estado
+  // Lógica de PIR según el modo actual
+  if (modoLuz == MODO_PIR && !forzadoPorMQTT) {
+    if (pir == HIGH && status_lights == false) {
+      // Encender luz al detectar movimiento
+      digitalWrite(LED_PIN, HIGH);
+      status_lights = true;
+      tiempoInicioLuces = now;
+      sendSecondaryMessage(); // Reportar cambio
+    } else if (status_lights && (now - tiempoInicioLuces >= 30000)) {
+      // Apagar después de 30 segundos
+      digitalWrite(LED_PIN, LOW);
+      status_lights = false;
+      sendSecondaryMessage(); // Reportar cambio
     }
+  }
 
-    // Resetear flag de alarma cancelada después del timeout de identificación
-    if (alarmaCancelada && (now - tiempoIdentificacion >= TIMEOUT_IDENTIFICACION)) {
-        alarmaCancelada = false;
+  // === Detección de puerta y UID ===
+  status_IR = ir;
+  status_PIR = pir;
+
+  // === IMPORTANTE: Silenciar buzzer siempre que se detecte un UID válido ===
+  if (rfid_ok) {
+    status_identification = true;
+    tiempoIdentificacion = now;
+    buzzer.setStatus(false);
+    buzzer.turnOffSound();
+    alarmaCancelada = true;  // Marcar que una alarma fue cancelada con identificación
+  }
+
+  // === NUEVO: Lectura previa de UID con puerta cerrada ===
+  if (ir == LOW && !puertaAbierta && !enVentanaGracia && rfid_ok) {
+    // Se detectó UID válido con puerta cerrada, iniciar ventana de gracia
+    enVentanaGracia = true;
+    inicioVentanaGracia = now;
+    Serial.println("Salida autorizada");
+    sendMainMessage(); // Notificar cambio de estado
+  }
+
+  // === Control de ventana de gracia para salida ===
+  if (enVentanaGracia) {
+    // Si la puerta se abre durante la ventana de gracia
+    if (ir == HIGH && !puertaAbierta) {
+      puertaAbierta = true;
+      tiempoApertura = now;
     }
-
-    // Apertura inicial (cuando no hay identificación previa o ventana de gracia)
-    if (ir == HIGH && !puertaAbierta && !enVentanaGracia) {
-        puertaAbierta = true;
-        tiempoApertura = now;
-        enVentana3s = false;
-        
-        // No resetear identificación aquí si estamos en proceso de salida
-        if (!status_identification) {
-            // Si no hay identificación previa, preparar para posible alarma
-            buzzer.setStatus(false); // Asegurar que el buzzer está apagado al inicio
-        }
+    
+    // Si la puerta se cierra durante la ventana de gracia, todo correcto
+    if (puertaAbierta && ir == LOW) {
+      puertaAbierta = false;
+      enVentanaGracia = false; // Fin de ventana de gracia, todo correcto
+      Serial.println("Salida completada correctamente");
+      sendMainMessage(); // Notificar salida correcta
     }
-
-    // Si permanece abierta >7s sin identificación y no estamos en ventana de gracia, activa alarma
-    if (puertaAbierta && !status_identification && !enVentanaGracia && (now - tiempoApertura >= 7000)) {
-        // Solo activar el buzzer si no se ha identificado y no hubo una cancelación reciente
-        if (!rfid_ok && !alarmaCancelada) {
-            buzzer.setStatus(true);
-            buzzer.playTone();
-            if (now - lastSend >= 2000) {
-                sendMainMessage();
-                lastSend = now;
-            }
-        }
-    }
-
-    // Cierre de puerta (cuando no estamos en ventana de gracia)
-    if (puertaAbierta && ir == LOW && !enVentanaGracia) {
-        // Si aún no estuvo en ventana de 3s y no pasó 7s, iniciar ventana 3s
-        if (!enVentana3s && (now - tiempoApertura < 7000) && !status_identification) {
-            enVentana3s = true;
-            inicioVentana3s = now;
-        }
-        
-        // La detección de UID ya se maneja al principio del loop
-        if (rfid_ok) {
-            Serial.println("Ingreso autorizado");
-            sendMainMessage();
-        }
-        puertaAbierta = false;
-    }
-
-    // Ventana de 3s para UID (ingreso regular)
-    if (enVentana3s && !status_identification) {
-        if (rfid_ok) {
-            // La identificación y buzzer ya se manejan al principio
-            Serial.println("Ingreso autorizado");
-            sendMainMessage();
-            enVentana3s = false;
-        } else if (now - inicioVentana3s >= 3000) {
-            // Solo activar buzzer si no hay UID y no hubo cancelación reciente
-            if (!rfid_ok && !alarmaCancelada) {
-                buzzer.setStatus(true);
-                buzzer.playTone();
-                if (now - lastSend >= 2000) {
-                    sendMainMessage();
-                    lastSend = now;
-                }
-            }
-            enVentana3s = false;
-        }
-    }
-
-    // === Envío por cambios de estado ===
-    // Buzzer alterna tono solo si está activo
-    if (buzzer.getStatus()) buzzer.sound();
-
-    // Envío por cambios de estado principal
-    if (status_identification != last_identification ||
-        status_IR != last_IR ||
-        buzzer.getStatus() != last_buzzer) {
+    
+    // Si pasan 7s y no se completó el ciclo abrir/cerrar
+    if (now - inicioVentanaGracia >= TIEMPO_VENTANA_GRACIA) {
+      // Si la puerta sigue abierta, mantener la ventana de gracia
+      if (puertaAbierta) {
+        // No hacemos nada, se esperará a que se cierre la puerta
+      } else {
+        // Si la puerta nunca se abrió y está cerrada
+        enVentanaGracia = false;
+        // NO activamos alarma aquí, solo cancelamos la ventana de gracia
+        Serial.println("⚠️ Ventana de gracia finalizada sin apertura de puerta");
         sendMainMessage();
-        last_identification = status_identification;
-        last_IR = status_IR;
-        last_buzzer = buzzer.getStatus();
+      }
     }
+  }
 
-    // Envío por cambios de estado secundario
-    if (status_PIR != last_PIR || status_lights != last_lights) {
-        sendSecondaryMessage();
-        last_PIR = status_PIR;
-        last_lights = status_lights;
+  // === CORRECCIÓN: Control de reset de identificación ===
+  // Resetear identificación después de un tiempo si la puerta está cerrada, no estamos en ventana de gracia
+  // y no hubo una cancelación de alarma reciente
+  if (status_identification && ir == LOW && !enVentanaGracia && 
+      (now - tiempoIdentificacion >= TIMEOUT_IDENTIFICACION) && !alarmaCancelada) {
+    status_identification = false;
+    Serial.println("🔄 Identificación reseteada por timeout");
+    sendMainMessage(); // Notificar cambio de estado
+  }
+
+  // Resetear flag de alarma cancelada después del timeout de identificación
+  if (alarmaCancelada && (now - tiempoIdentificacion >= TIMEOUT_IDENTIFICACION)) {
+    alarmaCancelada = false;
+  }
+
+  // Apertura inicial (cuando no hay identificación previa o ventana de gracia)
+  if (ir == HIGH && !puertaAbierta && !enVentanaGracia) {
+    puertaAbierta = true;
+    tiempoApertura = now;
+    enVentana3s = false;
+    
+    // No resetear identificación aquí si estamos en proceso de salida
+    if (!status_identification) {
+      // Si no hay identificación previa, preparar para posible alarma
+      buzzer.setStatus(false); // Asegurar que el buzzer está apagado al inicio
     }
+  }
+
+  // Si permanece abierta >7s sin identificación y no estamos en ventana de gracia, activa alarma
+  if (puertaAbierta && !status_identification && !enVentanaGracia && (now - tiempoApertura >= 7000)) {
+    // Solo activar el buzzer si no se ha identificado y no hubo una cancelación reciente
+    if (!rfid_ok && !alarmaCancelada) {
+      buzzer.setStatus(true);
+      buzzer.playTone();
+      if (now - lastSend >= 2000) {
+        sendMainMessage();
+        lastSend = now;
+      }
+    }
+  }
+
+  // Cierre de puerta (cuando no estamos en ventana de gracia)
+  if (puertaAbierta && ir == LOW && !enVentanaGracia) {
+    // Si aún no estuvo en ventana de 3s y no pasó 7s, iniciar ventana 3s
+    if (!enVentana3s && (now - tiempoApertura < 7000) && !status_identification) {
+      enVentana3s = true;
+      inicioVentana3s = now;
+    }
+    
+    // La detección de UID ya se maneja al principio del loop
+    if (rfid_ok) {
+      Serial.println("Ingreso autorizado");
+      sendMainMessage();
+    }
+    puertaAbierta = false;
+  }
+
+  // Ventana de 3s para UID (ingreso regular)
+  if (enVentana3s && !status_identification) {
+    if (rfid_ok) {
+      // La identificación y buzzer ya se manejan al principio
+      Serial.println("Ingreso autorizado");
+      sendMainMessage();
+      enVentana3s = false;
+    } else if (now - inicioVentana3s >= 3000) {
+      // Solo activar buzzer si no hay UID y no hubo cancelación reciente
+      if (!rfid_ok && !alarmaCancelada) {
+        buzzer.setStatus(true);
+        buzzer.playTone();
+        if (now - lastSend >= 2000) {
+          sendMainMessage();
+          lastSend = now;
+        }
+      }
+      enVentana3s = false;
+    }
+  }
+
+  // === Envío por cambios de estado ===
+  // Buzzer alterna tono solo si está activo
+  if (buzzer.getStatus()) buzzer.sound();
+
+  // Envío por cambios de estado principal
+  if (status_identification != last_identification ||
+      status_IR != last_IR ||
+      buzzer.getStatus() != last_buzzer) {
+    sendMainMessage();
+    last_identification = status_identification;
+    last_IR = status_IR;
+    last_buzzer = buzzer.getStatus();
+  }
+
+  // Envío por cambios de estado secundario
+  if (status_PIR != last_PIR || status_lights != last_lights) {
+    sendSecondaryMessage();
+    last_PIR = status_PIR;
+    last_lights = status_lights;
+  }
 }
