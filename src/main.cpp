@@ -1,4 +1,4 @@
-// Librerías
+// main.cpp - Versión actualizada según especificaciones
 #include <Arduino.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
@@ -13,7 +13,7 @@
 #define SS_PIN 21
 #define RST_PIN 22
 #define BUZZER_PIN 25
-#define LED_PIN 2
+#define LED_PIN 32
 #define BUTTON_LIGHTS_PIN 5
 
 // Instancias
@@ -25,38 +25,47 @@ RFID_mod rfid(SS_PIN, RST_PIN, UID_ESPERADO);
 
 // Configuración NTP
 const char* ntpServer = "pool.ntp.org";
-const long gmtOffset_sec = -5 * 3600; // Colombia
+const long gmtOffset_sec = -5 * 3600;
 const int daylightOffset_sec = 0;
 
-// Variables
+// Variables de estado
 const char* id_nodo = "NODE_A";
 bool status_identification = false;
 int status_IR = LOW;
 int status_PIR = LOW;
 bool status_lights = LOW;
 
-bool last_status_identification = false;
-bool last_status_IR = false;
-bool last_status_PIR = false;
-bool last_status_buzzer = false;
-bool last_status_lights = false;
+// Estados anteriores para envío MQTT
+bool last_identification = false;
+bool last_IR = false;
+bool last_buzzer = false;
+bool last_PIR = false;
+bool last_lights = false;
 
-int counter_RFID = 0;
-bool tiempoSinSensar = false;
-unsigned long tiempoInicioSinSensar = 0;
-unsigned long tiempoInicioAlarma = 0;
-bool puertaAbiertaSinID = false;
-
+// Temporizadores
 unsigned long tiempoInicioLuces = 0;
 bool lucesForzadas = false;
 
-// Funciones sensores
+// Identificación y alarma
+bool puertaAbierta = false;
+unsigned long tiempoApertura = 0;
+bool enVentana3s = false;
+unsigned long inicioVentana3s = 0;
+
+// Envío periódico en alarma
+unsigned long lastSend = 0;
+
+// Tiempo para resetear la identificación después de una lectura exitosa
+unsigned long tiempoIdentificacion = 0;
+const unsigned long TIMEOUT_IDENTIFICACION = 5000; // 5 segundos para resetear el estado
+
+// Lecturas
 int lecture_ir_sensor() { return digitalRead(SENSOR_IR_PIN); }
 int lecture_pir_sensor() { return digitalRead(SENSOR_PIR_PIN); }
 bool lecture_rfid_sensor() { return rfid.tarjetaDetectada(); }
 bool lecture_button_lights() { return digitalRead(BUTTON_LIGHTS_PIN); }
 
-// MQTT
+// Reconexión MQTT
 void reconnectMQTT() {
     while (!client.connected()) {
         Serial.print("Intentando conectar a MQTT...");
@@ -72,70 +81,62 @@ void reconnectMQTT() {
     }
 }
 
-// JSON Main
+// Formateo de fecha
+String getTimestamp() {
+    struct tm timeinfo;
+    if (!getLocalTime(&timeinfo)) return "N/A";
+    char buf[20];
+    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
+    return String(buf);
+}
+
+// Envío JSON genérico
 void sendMainMessage() {
-    JsonDocument doc;
+    StaticJsonDocument<256> doc;
     doc["id_node"] = id_nodo;
     doc["door"] = status_IR;
     doc["buzzer"] = buzzer.getStatus();
     doc["identification"] = status_identification;
-    struct tm timeinfo;
-    if (getLocalTime(&timeinfo)) {
-        char timeString[20];
-        strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M", &timeinfo);
-        doc["sent_at"] = timeString;
-    } else {
-        doc["sent_at"] = "N/A";
-    }
+    doc["sent_at"] = getTimestamp();
     char buffer[256];
     serializeJson(doc, buffer);
     client.publish(MQTT_TOPIC, buffer);
-    Serial.println("📤 Main JSON enviado.");
+    Serial.println("📤 Main JSON enviado: " + String(buffer));
 }
 
-// JSON Secundario
 void sendSecondaryMessage() {
-    JsonDocument doc;
+    StaticJsonDocument<256> doc;
     doc["id_node"] = id_nodo;
     doc["presence"] = status_PIR;
     doc["lights"] = status_lights;
-    struct tm timeinfo;
-    if (getLocalTime(&timeinfo)) {
-        char timeString[20];
-        strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M", &timeinfo);
-        doc["sent_at"] = timeString;
-    } else {
-        doc["sent_at"] = "N/A";
-    }
+    doc["sent_at"] = getTimestamp();
     char buffer[256];
     serializeJson(doc, buffer);
     client.publish(MQTT_TOPIC2, buffer);
-    Serial.println("📤 Secondary JSON enviado.");
+    Serial.println("📤 Secondary JSON enviado: " + String(buffer));
 }
 
-// Setup
 void setup() {
     Serial.begin(115200);
     pinMode(SENSOR_IR_PIN, INPUT);
     pinMode(SENSOR_PIR_PIN, INPUT);
     pinMode(LED_PIN, OUTPUT);
-    pinMode(BUTTON_LIGHTS_PIN, INPUT);
+    pinMode(BUTTON_LIGHTS_PIN, INPUT_PULLUP);
 
     wifi.begin();
     rfid.begin();
     client.setServer(MQTT_SERVER, MQTT_PORT);
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
-    Serial.println("⌛ Esperando sincronización NTP...");
+    // Esperar NTP
+    Serial.println("⌛ Sincronizando hora NTP...");
     struct tm timeinfo;
     while (!getLocalTime(&timeinfo)) {
-        Serial.println("⏳ Sincronizando hora...");
-        delay(1000);
+        delay(500);
     }
-    Serial.println("✅ Hora sincronizada.");
+    Serial.println("✅ Hora sincronizada: " + getTimestamp());
 }
 
-// Loop
 void loop() {
     wifi.update();
     if (!wifi.connected()) return;
@@ -143,106 +144,117 @@ void loop() {
     if (!client.connected()) reconnectMQTT();
     client.loop();
 
-    struct tm timeinfo;
-    if (!getLocalTime(&timeinfo)) return;
+    // Actualizar sensores
+    int ir = lecture_ir_sensor();
+    int pir = lecture_pir_sensor();
+    bool rfid_ok = lecture_rfid_sensor();
+    bool btn = lecture_button_lights();
 
-    // Sensado RFID
-    if (lecture_rfid_sensor()) {
-        counter_RFID++;
-        if (counter_RFID >= 4) status_identification = true;
-    } else {
-        counter_RFID = 0;
+    unsigned long now = millis();
+
+    // === Control PIR/luces ===
+    if (pir == HIGH && !lucesForzadas) {
+        digitalWrite(LED_PIN, HIGH);
+        status_lights = true;
+        tiempoInicioLuces = now;
     }
-
-    status_IR = lecture_ir_sensor();
-    status_PIR = lecture_pir_sensor();
-
-    // 🚪 Salida detectada
-    if (status_identification && status_IR == LOW && !tiempoSinSensar) {
-        sendMainMessage();
-        tiempoInicioSinSensar = millis();
-        tiempoSinSensar = true;
-
-        if (status_lights) {
-            status_lights = false;
-            digitalWrite(LED_PIN, LOW);
-            sendSecondaryMessage();
-        }
-    }
-
-    // ⏳ Pausa 7s post salida
-    if (tiempoSinSensar) {
-        if (millis() - tiempoInicioSinSensar < 7000) return;
-        else tiempoSinSensar = false;
-    }
-
-    // 🚨 Alarma por puerta abierta sin ID
-    if (status_IR == HIGH && !status_identification) {
-        if (!puertaAbiertaSinID) {
-            puertaAbiertaSinID = true;
-            tiempoInicioAlarma = millis();
-        }
-
-        if (millis() - tiempoInicioAlarma >= 5000) {
-            if (!buzzer.getStatus()) {
-                buzzer.setStatus(true);
-                buzzer.playTone();
-            }
-            static unsigned long lastSend = 0;
-            if (millis() - lastSend >= 2000) {
-                sendMainMessage();
-                lastSend = millis();
-            }
-        }
-        return;
-    }
-
-    // 🟢 Entrada detectada
-    if (status_identification && status_IR == LOW && buzzer.getStatus()) {
-        buzzer.setStatus(false);
-        buzzer.turnOffSound();
-        sendMainMessage();
-        puertaAbiertaSinID = false;
-    }
-
-    // 🔄 Detección de cambios
-    if (status_identification != last_status_identification || 
-        status_IR != last_status_IR || 
-        buzzer.getStatus() != last_status_buzzer) {
-        sendMainMessage();
-        last_status_identification = status_identification;
-        last_status_IR = status_IR;
-        last_status_buzzer = buzzer.getStatus();
-    }
-
-    if (status_PIR != last_status_PIR || status_lights != last_status_lights) {
-        sendSecondaryMessage();
-        last_status_PIR = status_PIR;
-        last_status_lights = status_lights;
-    }
-
-    // 💡 Manejo de luces
-    if (lecture_button_lights()) {
+    if (btn) {
         digitalWrite(LED_PIN, HIGH);
         status_lights = true;
         lucesForzadas = true;
-    } else if (!lucesForzadas && status_PIR && !status_lights) {
-        digitalWrite(LED_PIN, HIGH);
-        status_lights = true;
-        tiempoInicioLuces = millis();
+        tiempoInicioLuces = 0;
     }
-
-    if (!lucesForzadas && status_lights && (millis() - tiempoInicioLuces >= 45000)) {
+    if (!btn && lucesForzadas) lucesForzadas = false;
+    if (status_lights && !lucesForzadas && (now - tiempoInicioLuces >= 30000)) {
         digitalWrite(LED_PIN, LOW);
         status_lights = false;
     }
 
-    if (!lecture_button_lights() && lucesForzadas) {
-        lucesForzadas = false;
+    // === Detección de puerta y UID ===
+    status_IR = ir;
+    
+    // === CORRECCIÓN: Control de reset de identificación ===
+    // Resetear identificación después de un tiempo si la puerta está cerrada
+    if (status_identification && ir == LOW && (now - tiempoIdentificacion >= TIMEOUT_IDENTIFICACION)) {
+        status_identification = false;
+        Serial.println("🔄 Identificación reseteada por timeout");
+        sendMainMessage(); // Notificar cambio de estado
+    }
+    
+    // Apertura inicial
+    if (ir == HIGH && !puertaAbierta) {
+        puertaAbierta = true;
+        tiempoApertura = now;
+        enVentana3s = false;
+        // CORRECCIÓN: Reset de identificación al abrir la puerta nuevamente
+        status_identification = false;
+    }
+    
+    // Si permanece abierta >7s activa alarma
+    if (puertaAbierta && !status_identification && (now - tiempoApertura >= 7000)) {
+        buzzer.setStatus(true);
+        buzzer.playTone();
+        if (now - lastSend >= 2000) {
+            sendMainMessage();
+            lastSend = now;
+        }
+    }
+    
+    // Cierre de puerta
+    if (puertaAbierta && ir == LOW) {
+        // Si aún no estuvo en ventana de 3s y no pasó 7s, iniciar ventana 3s
+        if (!enVentana3s && (now - tiempoApertura < 7000)) {
+            enVentana3s = true;
+            inicioVentana3s = now;
+        }
+        
+        // Silenciar buzzer con UID válido en cierre (cualquier momento)
+        if (rfid_ok) {
+            status_identification = true;
+            tiempoIdentificacion = now; // Registrar cuándo se hizo la identificación
+            buzzer.setStatus(false);
+            buzzer.turnOffSound();
+            Serial.println(rfid_ok && enVentana3s ? "Ingreso autorizado" : "Salida autorizada");
+            sendMainMessage();
+        }
+        puertaAbierta = false;
+    }
+    
+    // Ventana de 3s para UID
+    if (enVentana3s && !status_identification) {
+        if (rfid_ok) {
+            status_identification = true;
+            tiempoIdentificacion = now; // Registrar cuándo se hizo la identificación
+            buzzer.setStatus(false);
+            Serial.println("Ingreso autorizado");
+            sendMainMessage();
+            enVentana3s = false;
+        } else if (now - inicioVentana3s >= 3000) {
+            buzzer.setStatus(true);
+            buzzer.playTone();
+            if (now - lastSend >= 2000) {
+                sendMainMessage();
+                lastSend = now;
+            }
+            enVentana3s = false;
+        }
     }
 
-    // Reset de identificación si todo está normal
-    if (status_IR == LOW && !lecture_rfid_sensor()) {
-        status_identification = false;
+    // === Envío por cambios de estado ===
+    // Buzzer alterna tono
+    if (buzzer.getStatus()) buzzer.sound();
+
+    if (status_identification != last_identification ||
+        status_IR != last_IR ||
+        buzzer.getStatus() != last_buzzer) {
+        sendMainMessage();
+        last_identification = status_identification;
+        last_IR = status_IR;
+        last_buzzer = buzzer.getStatus();
+    }
+    if (status_PIR != last_PIR || status_lights != last_lights) {
+        sendSecondaryMessage();
+        last_PIR = status_PIR;
+        last_lights = status_lights;
     }
 }
