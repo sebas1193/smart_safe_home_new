@@ -100,14 +100,25 @@ CREATE TABLE IF NOT EXISTS kitchen_actions (
     action_at     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (id_node) REFERENCES nodes(id_node) ON DELETE CASCADE
 );
+-- 10. Logs de estado genéricos (status_logs)
+CREATE TABLE IF NOT EXISTS status_logs (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    id_node       VARCHAR(100)    NOT NULL,               -- referencia a nodes.id_node  
+    status_alert  INT             NOT NULL,               -- código de alerta o estado
+    location      VARCHAR(100)    NOT NULL,               -- ubicación asociada
+    description  VARCHAR(200)    NOT NULL,                 -- descripción del estado
+    sent_at       DATETIME        NOT NULL,               -- cuándo se envió el log
+    recorded_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_node) REFERENCES nodes(id_node) ON DELETE CASCADE
+);
 
--- 10. Inserción de nodos iniciales
+-- 11. Inserción de nodos iniciales
 INSERT INTO nodes (id_node, owner_id, location, description) VALUES
     ('NODE_A',  NULL, 'front_door',  'Sensor de puerta frontal'),
     ('NODE_A1', NULL, 'living_room', 'Sensor de presencia en sala'),
     ('NODE_B',  NULL, 'kitchen',     'Sensor de ambiente en cocina');
 
--- 11. Nuevo propietario vinculado a todos los nodos
+-- 12. Nuevo propietario vinculado a todos los nodos
 INSERT INTO house_owner (first_name, last_name, phone, address)
 VALUES ('Carlos', 'Pérez', '555-0000', '789 Oak St.');
 
