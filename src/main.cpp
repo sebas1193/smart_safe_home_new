@@ -82,7 +82,10 @@ bool manual_off = false;
 bool auto_mode = true;
 bool remote_on = false;
 bool remote_off = false;
-
+// Variables para auto-restauración del modo después de control remoto
+bool reportedRemoteState = false;  // Para controlar si ya reportamos el estado remoto
+unsigned long remoteControlTime = 0;  // Tiempo en que se activó control remoto
+const unsigned long REMOTE_AUTO_RESET = 2000;  // Tiempo para auto-restaurar (2 segundos)
 // Lecturas
 int lecture_ir_sensor() { return digitalRead(SENSOR_IR_PIN); }
 int lecture_pir_sensor() { return digitalRead(SENSOR_PIR_PIN); }
@@ -97,11 +100,19 @@ void updateLightStates();
 void updateLightStates() {
   // Actualizar variables de estado según el modo actual
   if (forzadoPorMQTT) {
-    remote_on = (modoLuz == MODO_ENCENDIDO);
-    remote_off = (modoLuz == MODO_APAGADO);
+    // Solo establecer remote_on/off como true si aún no hemos reportado el estado
+    if (!reportedRemoteState) {
+      remote_on = (modoLuz == MODO_ENCENDIDO);
+      remote_off = (modoLuz == MODO_APAGADO);
+      reportedRemoteState = true;  // Marcar que ya reportamos este estado
+    } else {
+      // Después del primer reporte, mostrar que estamos en modo auto
+      remote_on = false;
+      remote_off = false;
+      auto_mode = true;
+    }
     manual_on = false;
     manual_off = false;
-    auto_mode = false;
   } else {
     remote_on = false;
     remote_off = false;
@@ -122,6 +133,7 @@ void updateLightStates() {
   }
 }
 
+// Callback para MQTT
 // Callback para MQTT
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("📩 Mensaje recibido [");
@@ -154,14 +166,20 @@ void callback(char* topic, byte* payload, unsigned int length) {
         modoLuz = MODO_APAGADO;
         digitalWrite(LED_PIN, LOW);
         status_lights = false;
+        reportedRemoteState = false;  // Reiniciar flag de reporte
+        remoteControlTime = millis();  // Iniciar temporizador para auto-restauración
         Serial.println("💡 Luces forzadas a OFF por MQTT");
         updateLightStates();
         sendSecondaryMessage();
       } else if (doc["turn_off"] == 0) {
-        // Restaurar control normal por PIR
-        forzadoPorMQTT = false;
-        modoLuz = MODO_PIR;
-        Serial.println("💡 Luces restauradas a modo PIR por MQTT");
+        // Forzar encendido permanente
+        forzadoPorMQTT = true;
+        modoLuz = MODO_ENCENDIDO;
+        digitalWrite(LED_PIN, HIGH);
+        status_lights = true;
+        reportedRemoteState = false;  // Reiniciar flag de reporte
+        remoteControlTime = millis();  // Iniciar temporizador para auto-restauración
+        Serial.println("💡 Luces forzadas a ON por MQTT");
         updateLightStates();
         sendSecondaryMessage();
       }
@@ -257,12 +275,29 @@ void setup() {
   Serial.println("✅ Hora sincronizada: " + getTimestamp());
   
   // Imprimir información de tópicos
-  Serial.println("Tópico principal (suscripción): " + String(MQTT_TOPIC));
+  Serial.println("Tópico principal (publicación): " + String(MQTT_TOPIC));
   Serial.println("Tópico de control de luces (suscripción): " + String(MQTT_TOPIC3));
   Serial.println("Tópico secundario (publicación): " + String(MQTT_TOPIC2));
 }
 
 void loop() {
+  // Variables para rastrear el estado anterior
+  static int last_PIR_state = -1;  // Inicializar con un valor imposible
+  static int last_lights_state = -1;
+  static bool last_manual_on_state = false;
+  static bool last_manual_off_state = false;
+  static bool last_auto_mode_state = true;
+  static bool last_remote_on_state = false;
+  static bool last_remote_off_state = false;
+  static int last_IR_state = -1;
+  static bool last_identification_state = false;
+  static bool last_buzzer_state = false;
+  
+  // Flag para forzar envío después de un cambio de estado
+  static bool stateJustChanged = false;
+  static unsigned long lastChangeTime = 0;
+  
+  // Resto del código actual...
   wifi.update();
   if (!wifi.connected()) return;
 
@@ -277,15 +312,39 @@ void loop() {
   bool rfid_ok = lecture_rfid_sensor();
   unsigned long now = millis();
   
+  // Inicializar estados si es la primera ejecución
+  if (last_PIR_state == -1) {
+    last_PIR_state = pir;
+    last_lights_state = status_lights;
+    last_IR_state = ir;
+  }
+  
   // === Control PIR/luces con tres estados ===
   bool btnActual = !digitalRead(BUTTON_LIGHTS_PIN); // Invertimos porque es INPUT_PULLUP
 
   // Control de botón con debounce
   if (btnActual != estadoAnteriorPulsador && (now - ultimoPulsador > 50)) { // 50ms debounce
     if (btnActual == true) { // Solo en flanco de bajada (presionar botón)
-      // Si no está forzado por MQTT, cambiamos modo
-      if (!forzadoPorMQTT) {
-        // Ciclar entre los tres modos
+      stateJustChanged = true;  // Marcar que hubo un cambio de estado
+      lastChangeTime = now;
+      
+      if (forzadoPorMQTT) {
+        // Si está forzado por MQTT, liberamos el control y volvemos a modo PIR
+        forzadoPorMQTT = false;
+        modoLuz = MODO_PIR;
+        Serial.println("💡 Control liberado de MQTT, volviendo a modo PIR");
+        
+        // Verificar si hay movimiento actual para determinar estado inicial
+        if (pir == HIGH) {
+          digitalWrite(LED_PIN, HIGH);
+          status_lights = true;
+          tiempoInicioLuces = now;
+        } else {
+          digitalWrite(LED_PIN, LOW);
+          status_lights = false;
+        }
+      } else {
+        // Comportamiento normal - ciclar entre los tres modos
         modoLuz = (modoLuz + 1) % 3;
         
         Serial.print("💡 Cambio de modo a: ");
@@ -313,11 +372,22 @@ void loop() {
             status_lights = false;
             break;
         }
-        
-        // Actualizar estados de control y enviar mensaje
-        updateLightStates();
-        sendSecondaryMessage();
       }
+      
+      // Actualizar estados antes de enviar
+      updateLightStates();
+      
+      // Guardar nuevo estado antes de enviar
+      last_lights_state = status_lights;
+      last_PIR_state = pir;
+      last_manual_on_state = manual_on;
+      last_manual_off_state = manual_off;
+      last_auto_mode_state = auto_mode;
+      last_remote_on_state = remote_on;
+      last_remote_off_state = remote_off;
+      
+      // Enviar mensaje SOLO UNA VEZ
+      sendSecondaryMessage();
     }
     ultimoPulsador = now;
   }
@@ -330,18 +400,129 @@ void loop() {
       digitalWrite(LED_PIN, HIGH);
       status_lights = true;
       tiempoInicioLuces = now;
-      sendSecondaryMessage(); // Reportar cambio
+      
+      stateJustChanged = true;  // Marcar cambio de estado
+      lastChangeTime = now;
+      
+      // Actualizar antes de enviar
+      updateLightStates();
+      
+      // Guardar nuevo estado antes de enviar
+      last_lights_state = status_lights;
+      last_PIR_state = pir;
+      last_manual_on_state = manual_on;
+      last_manual_off_state = manual_off;
+      last_auto_mode_state = auto_mode;
+      last_remote_on_state = remote_on;
+      last_remote_off_state = remote_off;
+      
+      // Enviar mensaje SOLO UNA VEZ
+      sendSecondaryMessage();
     } else if (status_lights && (now - tiempoInicioLuces >= 30000)) {
       // Apagar después de 30 segundos
       digitalWrite(LED_PIN, LOW);
       status_lights = false;
-      sendSecondaryMessage(); // Reportar cambio
+      
+      stateJustChanged = true;  // Marcar cambio de estado
+      lastChangeTime = now;
+      
+      // Actualizar antes de enviar
+      updateLightStates();
+      
+      // Guardar nuevo estado antes de enviar
+      last_lights_state = status_lights;
+      last_PIR_state = pir;
+      last_manual_on_state = manual_on;
+      last_manual_off_state = manual_off;
+      last_auto_mode_state = auto_mode;
+      last_remote_on_state = remote_on;
+      last_remote_off_state = remote_off;
+      
+      // Enviar mensaje SOLO UNA VEZ
+      sendSecondaryMessage();
     }
+  }
+
+  // Auto-restauración después de control remoto
+  static bool autoRestoreMessageSent = false;
+  
+  if (forzadoPorMQTT && (now - remoteControlTime >= REMOTE_AUTO_RESET)) {
+    // Verificar si ya hemos enviado al menos un mensaje con estado remoto
+    if (reportedRemoteState && !autoRestoreMessageSent) {
+      // Cambiar a modo PIR realmente, no solo el reporte
+      forzadoPorMQTT = false;
+      modoLuz = MODO_PIR;
+      
+      // Verificar si hay movimiento para determinar el estado de las luces
+      if (pir == HIGH) {
+        // Mantener la luz encendida por 30s desde ahora
+        digitalWrite(LED_PIN, HIGH);
+        status_lights = true;
+        tiempoInicioLuces = now;
+      } else {
+        // Apagar la luz si no hay movimiento
+        digitalWrite(LED_PIN, LOW);
+        status_lights = false;
+      }
+      
+      stateJustChanged = true;  // Marcar cambio de estado
+      lastChangeTime = now;
+      
+      // Actualizar estados
+      updateLightStates();
+      
+      // Guardar nuevo estado antes de enviar
+      last_lights_state = status_lights;
+      last_PIR_state = pir;
+      last_manual_on_state = manual_on;
+      last_manual_off_state = manual_off;
+      last_auto_mode_state = auto_mode;
+      last_remote_on_state = remote_on;
+      last_remote_off_state = remote_off;
+      
+      // Enviar mensaje SOLO UNA VEZ
+      sendSecondaryMessage();
+      
+      // Marcar que ya restauramos el sistema
+      autoRestoreMessageSent = true;
+      
+      Serial.println("💡 Restaurado a modo automático PIR después de control remoto");
+    }
+  } else if (!forzadoPorMQTT) {
+    // Reiniciar el flag si salimos del estado forzado por MQTT
+    autoRestoreMessageSent = false;
   }
 
   // === Detección de puerta y UID ===
   status_IR = ir;
   status_PIR = pir;
+
+  // Detectar cambios en el estado del PIR (presencia)
+  if (status_PIR != last_PIR_state) {
+    // Solo marcar el cambio si no acabamos de enviar un mensaje
+    if (!stateJustChanged || (now - lastChangeTime > 500)) {
+      stateJustChanged = true;
+      lastChangeTime = now;
+      
+      // Actualizar antes de enviar
+      updateLightStates();
+      
+      // Guardar nuevo estado antes de enviar
+      last_PIR_state = status_PIR;
+      last_lights_state = status_lights;
+      last_manual_on_state = manual_on;
+      last_manual_off_state = manual_off;
+      last_auto_mode_state = auto_mode;
+      last_remote_on_state = remote_on;
+      last_remote_off_state = remote_off;
+      
+      // Enviar mensaje SOLO UNA VEZ
+      sendSecondaryMessage();
+    } else {
+      // Solo actualizar el estado sin enviar mensaje
+      last_PIR_state = status_PIR;
+    }
+  }
 
   // === IMPORTANTE: Silenciar buzzer siempre que se detecte un UID válido ===
   if (rfid_ok) {
@@ -358,6 +539,12 @@ void loop() {
     enVentanaGracia = true;
     inicioVentanaGracia = now;
     Serial.println("Salida autorizada");
+    
+    // Actualizar estado antes de enviar
+    last_IR_state = status_IR;
+    last_identification_state = status_identification;
+    last_buzzer_state = buzzer.getStatus();
+    
     sendMainMessage(); // Notificar cambio de estado
   }
 
@@ -374,6 +561,12 @@ void loop() {
       puertaAbierta = false;
       enVentanaGracia = false; // Fin de ventana de gracia, todo correcto
       Serial.println("Salida completada correctamente");
+      
+      // Actualizar estado antes de enviar
+      last_IR_state = status_IR;
+      last_identification_state = status_identification;
+      last_buzzer_state = buzzer.getStatus();
+      
       sendMainMessage(); // Notificar salida correcta
     }
     
@@ -387,6 +580,12 @@ void loop() {
         enVentanaGracia = false;
         // NO activamos alarma aquí, solo cancelamos la ventana de gracia
         Serial.println("⚠️ Ventana de gracia finalizada sin apertura de puerta");
+        
+        // Actualizar estado antes de enviar
+        last_IR_state = status_IR;
+        last_identification_state = status_identification;
+        last_buzzer_state = buzzer.getStatus();
+        
         sendMainMessage();
       }
     }
@@ -399,6 +598,12 @@ void loop() {
       (now - tiempoIdentificacion >= TIMEOUT_IDENTIFICACION) && !alarmaCancelada) {
     status_identification = false;
     Serial.println("🔄 Identificación reseteada por timeout");
+    
+    // Actualizar estado antes de enviar
+    last_IR_state = status_IR;
+    last_identification_state = status_identification;
+    last_buzzer_state = buzzer.getStatus();
+    
     sendMainMessage(); // Notificar cambio de estado
   }
 
@@ -418,18 +623,45 @@ void loop() {
       // Si no hay identificación previa, preparar para posible alarma
       buzzer.setStatus(false); // Asegurar que el buzzer está apagado al inicio
     }
+    
+    // Detectar cambio en el estado de la puerta
+    if (status_IR != last_IR_state) {
+      // Actualizar estado antes de enviar
+      last_IR_state = status_IR;
+      last_identification_state = status_identification;
+      last_buzzer_state = buzzer.getStatus();
+      
+      sendMainMessage();
+    }
   }
 
   // Si permanece abierta >7s sin identificación y no estamos en ventana de gracia, activa alarma
   if (puertaAbierta && !status_identification && !enVentanaGracia && (now - tiempoApertura >= 7000)) {
     // Solo activar el buzzer si no se ha identificado y no hubo una cancelación reciente
-    if (!rfid_ok && !alarmaCancelada) {
+    if (!rfid_ok && !alarmaCancelada && !buzzer.getStatus()) {
       buzzer.setStatus(true);
       buzzer.playTone();
-      if (now - lastSend >= 2000) {
+      
+      // Detectar cambio en el estado del buzzer
+      if (buzzer.getStatus() != last_buzzer_state) {
+        // Actualizar estado antes de enviar
+        last_IR_state = status_IR;
+        last_identification_state = status_identification;
+        last_buzzer_state = buzzer.getStatus();
+        
         sendMainMessage();
         lastSend = now;
       }
+    } else if (buzzer.getStatus() && (now - lastSend >= 2000)) {
+      // Enviar actualización periódica del estado de alarma, pero menos frecuente
+      lastSend = now;
+      
+      // Actualizar estado antes de enviar
+      last_IR_state = status_IR;
+      last_identification_state = status_identification;
+      last_buzzer_state = buzzer.getStatus();
+      
+      sendMainMessage();
     }
   }
 
@@ -444,9 +676,25 @@ void loop() {
     // La detección de UID ya se maneja al principio del loop
     if (rfid_ok) {
       Serial.println("Ingreso autorizado");
+      
+      // Actualizar estado antes de enviar
+      last_IR_state = status_IR;
+      last_identification_state = status_identification;
+      last_buzzer_state = buzzer.getStatus();
+      
       sendMainMessage();
     }
     puertaAbierta = false;
+    
+    // Detectar cambio en el estado de la puerta
+    if (status_IR != last_IR_state) {
+      // Actualizar estado antes de enviar
+      last_IR_state = status_IR;
+      last_identification_state = status_identification;
+      last_buzzer_state = buzzer.getStatus();
+      
+      sendMainMessage();
+    }
   }
 
   // Ventana de 3s para UID (ingreso regular)
@@ -454,14 +702,27 @@ void loop() {
     if (rfid_ok) {
       // La identificación y buzzer ya se manejan al principio
       Serial.println("Ingreso autorizado");
+      
+      // Actualizar estado antes de enviar
+      last_IR_state = status_IR;
+      last_identification_state = status_identification;
+      last_buzzer_state = buzzer.getStatus();
+      
       sendMainMessage();
       enVentana3s = false;
     } else if (now - inicioVentana3s >= 3000) {
       // Solo activar buzzer si no hay UID y no hubo cancelación reciente
-      if (!rfid_ok && !alarmaCancelada) {
+      if (!rfid_ok && !alarmaCancelada && !buzzer.getStatus()) {
         buzzer.setStatus(true);
         buzzer.playTone();
-        if (now - lastSend >= 2000) {
+        
+        // Detectar cambio en el estado del buzzer
+        if (buzzer.getStatus() != last_buzzer_state) {
+          // Actualizar estado antes de enviar
+          last_IR_state = status_IR;
+          last_identification_state = status_identification;
+          last_buzzer_state = buzzer.getStatus();
+          
           sendMainMessage();
           lastSend = now;
         }
@@ -474,21 +735,22 @@ void loop() {
   // Buzzer alterna tono solo si está activo
   if (buzzer.getStatus()) buzzer.sound();
 
-  // Envío por cambios de estado principal
-  if (status_identification != last_identification ||
-      status_IR != last_IR ||
-      buzzer.getStatus() != last_buzzer) {
+  // Envío por cambios de estado principal - SOLO si hay un cambio real
+  if ((status_identification != last_identification_state) ||
+      (status_IR != last_IR_state) ||
+      (buzzer.getStatus() != last_buzzer_state)) {
+    // Actualizar estado antes de enviar
+    last_identification_state = status_identification;
+    last_IR_state = status_IR;
+    last_buzzer_state = buzzer.getStatus();
+    
     sendMainMessage();
-    last_identification = status_identification;
-    last_IR = status_IR;
-    last_buzzer = buzzer.getStatus();
   }
 
-  // Envío por cambios de estado secundario
-  if (status_PIR != last_PIR || status_lights != last_lights) {
-    updateLightStates(); // Asegurar que los estados están actualizados
-    sendSecondaryMessage();
-    last_PIR = status_PIR;
-    last_lights = status_lights;
+  // El control de envío secundario ya está manejado cuando ocurren los cambios
+  
+  // Resetear flag de cambio reciente después de cierto tiempo
+  if (stateJustChanged && (now - lastChangeTime > 500)) {
+    stateJustChanged = false;
   }
 }
