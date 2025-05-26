@@ -26,8 +26,14 @@ app.set('view engine', 'ejs');
 app.get('/', (req, res) => res.render('index'));
 app.get('/login', (req, res) => res.render('login'));
 
-// Ruta de autenticación
-// Ruta de autenticación
+function isAuthenticated(req, res, next) {
+  if (req.session.loggedin) {
+    return next();
+  } else {
+    return res.redirect('/login');
+  }
+}
+
 // Ruta de autenticación
 app.post('/auth', async (req, res) => { 
     const { user, passwd } = req.body; 
@@ -69,6 +75,16 @@ app.post('/auth', async (req, res) => {
 
 app.get('/sign_up', (req, res) => res.render('sign_up'));
 
+app.get('/sign_up_owner', isAuthenticated, (req, res) => {
+  res.render('sign_up_owner', {
+    user: req.session.user,
+    userId: req.session.userId,
+    firstName: req.session.firstName,
+    lastName: req.session.lastName,
+    role: req.session.role
+  });
+});
+
 app.get('/status_logs_owner', async (req, res) => {
     try {
         const { user_id, owner_id } = req.query;
@@ -79,6 +95,42 @@ app.get('/status_logs_owner', async (req, res) => {
     }
 });
 
+// Agregar esta ruta en tu index.js después de las otras rutas
+
+app.get('/owner_info_contact', isAuthenticated, async (req, res) => {
+  try {
+    const { id_owner } = req.query;
+    
+    // Validar que se proporcione el id_owner
+    if (!id_owner) {
+      return res.redirect('/user?error=missing_owner_id');
+    }
+
+    // Llamar al endpoint de Node-RED para obtener la información del owner
+    const response = await axios.get(`http://localhost:1880/owner_info?username=${encodeURIComponent(req.session.user)}&id_owner=${id_owner}`);
+    const result = response.data;
+
+    if (result.success) {
+      // Renderizar la vista con la información del owner y datos de sesión
+      res.render('owner_info_contact', {
+        user: req.session.user,
+        userId: req.session.userId,
+        firstName: req.session.firstName,
+        lastName: req.session.lastName,
+        role: req.session.role,
+        userData: req.session.userData,
+        ownerInfo: result.data.house_owner,
+        requestedBy: result.data.requested_by
+      });
+    } else {
+      // Si hay error, redirigir a user con mensaje de error
+      res.redirect(`/user?error=${encodeURIComponent(result.message)}`);
+    }
+  } catch (error) {
+    console.error('Error fetching owner info:', error);
+    res.redirect('/user?error=server_error');
+  }
+});
 // Vistas según rol
 app.get('/admin', (req, res) => { 
     if (req.session.loggedin && req.session.role === 'admin') { 
