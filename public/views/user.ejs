@@ -107,9 +107,14 @@
               <p class="mb-1"><strong>ID:</strong> ${owner.id}</p>
               <p class="mb-0"><strong>Full Name:</strong> ${owner.first_name} ${owner.last_name}</p>
             </div>
-            <button class="btn btn-outline-primary view-logs-btn" data-owner-id="${owner.id}" title="View Status Logs">
-              <i class="fas fa-list-alt"></i>
-            </button>
+            <div class="btn-group" role="group">
+              <button class="btn btn-outline-primary view-logs-btn" data-owner-id="${owner.id}" title="View Status Logs">
+                <i class="fas fa-list-alt"></i>
+              </button>
+              <a href="/owner_info_contact?id_owner=${owner.id}" class="btn btn-outline-secondary" title="More Info">
+                <i class="fas fa-info-circle"></i>
+              </a>
+            </div>
           </div>
         </div>
       `;
