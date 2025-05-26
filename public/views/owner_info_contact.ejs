@@ -1,0 +1,145 @@
+<%- include("partials/header") %>
+<%- include("partials/nav_logout") %>
+
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-6">
+      <div class="card">
+        <div class="card-header bg-success text-white">
+          <h4 class="mb-0">
+            <i class="fas fa-home"></i> House Owner Details
+          </h4>
+        </div>
+        <div class="card-body">
+          <!-- Owner ID Badge -->
+          <div class="text-center mb-4">
+            <span class="badge badge-primary badge-lg" style="font-size: 1.2em; padding: 10px 20px;">
+              <strong>ID: <%= ownerInfo.id %></strong>
+            </span>
+          </div>
+
+          <!-- Owner Name -->
+          <div class="text-center mb-4">
+            <h3 class="text-primary">
+              <%= ownerInfo.first_name %> <%= ownerInfo.last_name %>
+            </h3>
+          </div>
+
+          <!-- Owner Details List -->
+          <ul class="list-group list-group-flush">
+            <li class="list-group-item d-flex align-items-center">
+              <i class="fas fa-phone text-success me-3"></i>
+              <div>
+                <strong>Phone:</strong> 
+                <a href="tel:<%= ownerInfo.phone %>" class="text-decoration-none ms-2">
+                  <%= ownerInfo.phone %>
+                </a>
+              </div>
+            </li>
+            
+            <li class="list-group-item d-flex align-items-center">
+              <i class="fas fa-map-marker-alt text-warning me-3"></i>
+              <div>
+                <strong>Address:</strong> 
+                <span class="ms-2"><%= ownerInfo.address %></span>
+              </div>
+            </li>
+            
+            <li class="list-group-item d-flex align-items-center">
+              <i class="fas fa-calendar-plus text-info me-3"></i>
+              <div>
+                <strong>Created:</strong> 
+                <span class="ms-2">
+                  <%= new Date(ownerInfo.created_at).toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric'
+                  }) %> at <%= new Date(ownerInfo.created_at).toLocaleTimeString('en-US', { 
+                    hour: 'numeric', 
+                    minute: '2-digit',
+                    hour12: true
+                  }) %>
+                </span>
+              </div>
+            </li>
+            
+            <li class="list-group-item d-flex align-items-center">
+              <i class="fas fa-calendar-check text-secondary me-3"></i>
+              <div>
+                <strong>Updated:</strong> 
+                <span class="ms-2">
+                  <%= new Date(ownerInfo.updated_at).toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric'
+                  }) %> at <%= new Date(ownerInfo.updated_at).toLocaleTimeString('en-US', { 
+                    hour: 'numeric', 
+                    minute: '2-digit',
+                    hour12: true
+                  }) %>
+                </span>
+              </div>
+            </li>
+          </ul>
+
+          <!-- Action Buttons -->
+          <div class="text-center mt-4">
+            <div class="btn-group" role="group">
+              <a href="/user" class="btn btn-primary btn-lg">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+              </a>
+              <a href="/edit_owner?id_owner=<%= ownerInfo.id %>" class="btn btn-success btn-lg">
+                <i class="fas fa-edit"></i> Update Info
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.badge-lg {
+  font-size: 1.2em;
+  padding: 10px 20px;
+}
+
+.me-3 {
+  margin-right: 1rem !important;
+}
+
+.ms-2 {
+  margin-left: 0.5rem !important;
+}
+
+.text-decoration-none {
+  text-decoration: none !important;
+}
+
+.list-group-item {
+  border-left: none;
+  border-right: none;
+  padding: 1rem;
+}
+
+.list-group-item:first-child {
+  border-top: none;
+}
+
+.btn-group .btn {
+  margin: 0 5px;
+}
+
+@media (max-width: 576px) {
+  .btn-group {
+    flex-direction: column;
+  }
+  .btn-group .btn {
+    margin: 5px 0;
+    width: 100%;
+  }
+}
+</style>
+
+<%- include("partials/footer") %>
