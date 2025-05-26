@@ -3,7 +3,6 @@
 
 <div class="container mt-5">
   <div class="row">
-    <!-- User Info Panel -->
     <div class="col-md-6 mb-4">
       <div class="card">
         <div class="card-header bg-primary text-white">
@@ -29,7 +28,6 @@
       </div>
     </div>
 
-    <!-- Linked House Owners -->
     <div class="col-md-6">
       <div class="card">
         <div class="card-header bg-info text-white">
@@ -37,17 +35,23 @@
         </div>
         <div class="card-body">
           <div id="owners-list" class="row g-3">
-            <!-- Owner cards will be injected here -->
-          </div>
-          <!-- Pagination controls -->
+            </div>
           <nav aria-label="Owners pagination" class="mt-3">
             <ul id="owners-pagination" class="pagination justify-content-center mb-0">
-              <!-- Page items injected here -->
-            </ul>
+              </ul>
           </nav>
         </div>
       </div>
     </div>
+  </div>
+
+  <div id="owner-logs-section" class="mt-5 d-none">
+    <h4>Owner Status Logs</h4>
+    <ul id="logs-list" class="list-group"></ul>
+    <nav aria-label="Owner logs pagination" class="mt-3">
+      <ul id="logs-pagination" class="pagination justify-content-center mb-0">
+        </ul>
+    </nav>
   </div>
 </div>
 
@@ -55,19 +59,25 @@
 
 <script>
   const username = '<%= user %>';
-  const endpoint = `http://localhost:1880/n_owner_house?username=${encodeURIComponent(username)}`;
+  const userId = '<%= userId %>'; // Asegúrate de que userId esté disponible en tu contexto EJS
+  const ownersEndpoint = `http://localhost:1880/n_owner_house?username=${encodeURIComponent(username)}`;
   let owners = [];
-  const pageSize = 5;
-  let currentPage = 1;
+  const ownersPageSize = 5;
+  let ownersCurrentPage = 1;
+
+  let logsData = [];
+  const logsPageSize = 5;
+  let logsCurrentPage = 1;
+  let currentOwnerId = null;
 
   async function fetchOwners() {
     try {
-      const res = await fetch(endpoint);
+      const res = await fetch(ownersEndpoint);
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
         owners = json.data;
-        renderPage(1);
-        renderPagination();
+        renderOwnersPage(1);
+        renderOwnersPagination();
       } else {
         console.error('Failed to load owners', json.message);
       }
@@ -76,54 +86,146 @@
     }
   }
 
-  function renderPage(page) {
-    currentPage = page;
+  function renderOwnersPage(page) {
+    ownersCurrentPage = page;
     const listDiv = document.getElementById('owners-list');
     listDiv.innerHTML = '';
-    const start = (page - 1) * pageSize;
-    const pageOwners = owners.slice(start, start + pageSize);
+    const start = (page - 1) * ownersPageSize;
+    const pageOwners = owners.slice(start, start + ownersPageSize);
 
     pageOwners.forEach(owner => {
       const col = document.createElement('div');
       col.className = 'col-12';
       col.innerHTML = `
-        <div class="card">
+        <div class="card mb-2">
           <div class="card-body d-flex justify-content-between align-items-center">
             <div>
               <p class="mb-1"><strong>ID:</strong> ${owner.id}</p>
               <p class="mb-0"><strong>Full Name:</strong> ${owner.first_name} ${owner.last_name}</p>
             </div>
-            <a href="/status_logs_owner?user_id=<%= userId %>&owner_id=${owner.id}" class="btn btn-outline-primary" title="View details">
-              <i class="fas fa-arrow-right"></i>
-            </a>
+            <button class="btn btn-outline-primary view-logs-btn" data-owner-id="${owner.id}" title="View Status Logs">
+              <i class="fas fa-list-alt"></i>
+            </button>
           </div>
         </div>
       `;
       listDiv.appendChild(col);
     });
-  }
 
-  function renderPagination() {
-    const totalPages = Math.ceil(owners.length / pageSize);
-    const pagUL = document.getElementById('owners-pagination');
-    pagUL.innerHTML = '';
-    for (let i = 1; i <= totalPages; i++) {
-      const li = document.createElement('li');
-      li.className = `page-item ${i === currentPage ? 'active' : ''}`;
-      li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
-      pagUL.appendChild(li);
-    }
-    // add click handlers
-    pagUL.querySelectorAll('a.page-link').forEach(link => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        const page = parseInt(e.target.dataset.page);
-        renderPage(page);
-        renderPagination();
+    // Attach event listeners to the new buttons
+    listDiv.querySelectorAll('.view-logs-btn').forEach(button => {
+      button.addEventListener('click', function() {
+        const ownerId = this.dataset.ownerId;
+        currentOwnerId = ownerId;
+        fetchOwnerLogs(userId, ownerId);
       });
     });
   }
 
-  // Fetch on load
-  document.addEventListener('DOMContentLoaded', fetchOwners);
+  function renderOwnersPagination() {
+    const totalPages = Math.ceil(owners.length / ownersPageSize);
+    const pagUL = document.getElementById('owners-pagination');
+    pagUL.innerHTML = '';
+    for (let i = 1; i <= totalPages; i++) {
+      const li = document.createElement('li');
+      li.className = `page-item ${i === ownersCurrentPage ? 'active' : ''}`;
+      li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
+      pagUL.appendChild(li);
+    }
+    pagUL.querySelectorAll('a.page-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const page = parseInt(e.target.dataset.page);
+        renderOwnersPage(page);
+        renderOwnersPagination();
+      });
+    });
+  }
+
+  async function fetchOwnerLogs(userId, ownerId) {
+    try {
+      const logsEndpoint = `/status_logs_owner?user_id=${userId}&owner_id=${ownerId}`;
+      const res = await fetch(logsEndpoint);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        logsData = json.data;
+        renderLogsPage(1);
+        renderLogsPagination();
+        document.getElementById('owner-logs-section').classList.remove('d-none');
+        document.getElementById('owner-logs-section').scrollIntoView({ behavior: 'smooth' });
+      } else {
+        console.error('Failed to load logs', json.message);
+        document.getElementById('owner-logs-section').classList.add('d-none');
+      }
+    } catch (err) {
+      console.error('Error fetching logs', err);
+      document.getElementById('owner-logs-section').classList.add('d-none');
+    }
+  }
+
+  function renderLogsPage(page) {
+    logsCurrentPage = page;
+    const list = document.getElementById('logs-list');
+    list.innerHTML = '';
+    const start = (page - 1) * logsPageSize;
+    const pageLogs = logsData.slice(start, start + logsPageSize);
+
+    pageLogs.forEach(log => {
+      let itemClass = 'list-group-item';
+      if (log.status_alert === 0 || log.status_alert === 1) {
+        itemClass += ' list-group-item-success';
+      } else if (log.status_alert === 2 || log.status_alert === 3) {
+        itemClass += ' list-group-item-warning';
+      } else if (log.status_alert === 4 || log.status_alert === 5) {
+        itemClass += ' list-group-item-danger';
+      }
+
+      const li = document.createElement('li');
+      li.className = itemClass;
+      li.innerHTML = `
+        <strong>${new Date(log.recorded_at).toLocaleString()}</strong><br>
+        <span class="text-muted">Nodo:</span> ${log.id_node} |
+        <span class="text-muted">Ubicación:</span> ${log.location} |
+        <span class="text-muted">Estado:</span> ${log.description}
+      `;
+      list.appendChild(li);
+    });
+  }
+
+  function renderLogsPagination() {
+    const totalPages = Math.ceil(logsData.length / logsPageSize);
+    const pagUL = document.getElementById('logs-pagination');
+    pagUL.innerHTML = '';
+
+    if (totalPages > 1) {
+      for (let i = 1; i <= totalPages; i++) {
+        const li = document.createElement('li');
+        li.className = `page-item ${i === logsCurrentPage ? 'active' : ''}`;
+        li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
+        li.addEventListener('click', e => {
+          e.preventDefault();
+          const page = parseInt(e.target.dataset.page);
+          renderLogsPage(page);
+          renderLogsPagination();
+        });
+        pagUL.appendChild(li);
+      }
+    }
+  }
+
+  function getQueryParam(key) {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(key);
+  }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    await fetchOwners();
+
+    // Check if owner_id is in the query parameters on load
+    const initialOwnerId = getQueryParam('owner_id');
+    if (initialOwnerId) {
+      currentOwnerId = initialOwnerId;
+      fetchOwnerLogs(userId, initialOwnerId);
+    }
+  });
 </script>
