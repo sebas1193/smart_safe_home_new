@@ -1,0 +1,32 @@
+<%- include("partials/header") %>
+</nav>
+
+<div class="container pt-5">
+  <div class="row justify-content-center">
+    <div class="col-12 col-md-6 col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h3 class="text-center mb-4">Login</h3>
+          <form action="/auth" method="POST">
+            <div class="form-group">
+              <label for="user">User</label>
+              <input type="text" name="user" id="user" class="form-control" placeholder="Username" required>
+            </div>
+            <div class="form-group">
+              <label for="passwd">Password</label>
+              <input type="password" name="passwd" id="passwd" class="form-control" placeholder="Password" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block mt-4">Login</button>
+          </form>
+
+          <!-- Enlace centrado -->
+          <div class="text-center mt-3">
+            <a href="/sign_up">Don't have an account yet?</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include("partials/footer") %>
