@@ -1,0 +1,284 @@
+<%- include("partials/header") %>
+<%- include("partials/nav_logout") %>
+</nav>
+
+<div class="container pt-5">
+  <div class="row justify-content-center">
+    <div class="col-12 col-md-10 col-lg-8">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h3 class="text-center mb-4">Sign Up Owner</h3>
+          
+          <!-- PASO 1: Búsqueda y validación del nodo -->
+          <div id="nodeSearchSection">
+            <div class="alert alert-info">
+              <strong>Step 1:</strong> First, search and validate the node that will be assigned to the new owner.
+            </div>
+            
+            <div class="form-group">
+              <label for="nodeSearch">
+                <i class="fas fa-search"></i> Search Node ID
+              </label>
+              <div class="input-group">
+                <input 
+                  type="text" 
+                  id="nodeSearch" 
+                  class="form-control" 
+                  placeholder="Enter Node ID (e.g., NODE_A1)" 
+                  required>
+                <div class="input-group-append">
+                  <button type="button" id="searchNodeBtn" class="btn btn-primary">
+                    <i class="fas fa-search"></i> Search
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Resultado de la búsqueda del nodo -->
+            <div id="nodeSearchResult" class="mt-3" style="display: none;"></div>
+          </div>
+
+          <!-- PASO 2: Formulario de registro (inicialmente oculto) -->
+          <div id="ownerFormSection" style="display: none;">
+            <div class="alert alert-success">
+              <strong>Step 2:</strong> Node validated successfully! Now complete the owner information.
+            </div>
+            
+            <form id="signUpOwnerForm">
+              <!-- Campo oculto para el ID del nodo -->
+              <input type="hidden" name="id_node" id="id_node" value="">
+              
+              <div class="form-group">
+                <label for="username">Username</label>
+                <input 
+                  type="text" 
+                  name="username" 
+                  id="username" 
+                  class="form-control" 
+                  value="<%= user %>" 
+                  readonly>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group col-md-6">
+                  <label for="first_name">First Name</label>
+                  <input type="text" name="first_name" id="first_name" class="form-control" required>
+                </div>
+                <div class="form-group col-md-6">
+                  <label for="last_name">Last Name</label>
+                  <input type="text" name="last_name" id="last_name" class="form-control" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group col-md-6">
+                  <label for="phone">Phone</label>
+                  <input type="text" name="phone" id="phone" class="form-control" required>
+                </div>
+                <div class="form-group col-md-6">
+                  <label for="address">Address</label>
+                  <input type="text" name="address" id="address" class="form-control" required>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-success btn-block mt-4">
+                <i class="fas fa-user-plus"></i> Register Owner
+              </button>
+            </form>
+            
+            <button type="button" id="backToSearch" class="btn btn-secondary btn-block mt-2">
+              <i class="fas fa-arrow-left"></i> Search Another Node
+            </button>
+          </div>
+
+          <div class="text-center mt-3">
+            <a href="/user">Back to Panel</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.node-info {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 5px;
+  padding: 15px;
+  margin-top: 10px;
+}
+
+.node-info h5 {
+  color: #28a745;
+  margin-bottom: 10px;
+}
+
+.node-detail {
+  margin-bottom: 5px;
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+</style>
+
+<script>
+// Variables globales
+let validatedNodeId = null;
+
+// Event Listeners
+document.getElementById("searchNodeBtn").addEventListener("click", searchNode);
+document.getElementById("nodeSearch").addEventListener("keypress", function(e) {
+  if (e.key === 'Enter') {
+    searchNode();
+  }
+});
+
+document.getElementById("backToSearch").addEventListener("click", function() {
+  // Ocultar formulario y mostrar búsqueda
+  document.getElementById("ownerFormSection").style.display = "none";
+  document.getElementById("nodeSearchSection").style.display = "block";
+  
+  // Limpiar campos
+  document.getElementById("nodeSearch").value = "";
+  document.getElementById("nodeSearchResult").style.display = "none";
+  validatedNodeId = null;
+});
+
+document.getElementById("signUpOwnerForm").addEventListener("submit", async function (e) {
+  e.preventDefault();
+
+  const form = e.target;
+  const formData = new FormData(form);
+  const queryString = new URLSearchParams(formData).toString();
+
+  try {
+    const response = await fetch(`http://localhost:1880/sign_up_owner?${queryString}`, {
+      method: "POST"
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      alert(`Owner registered successfully!\nNode ${result.data.node_assigned.id_node} has been assigned to the new owner.`);
+      window.location.href = "/user";
+    } else {
+      alert(result.message || "Error registering owner.");
+      // Si el error menciona redirección a /user, redirigir
+      if (result.message && result.message.includes("Redirecting to /user")) {
+        setTimeout(() => {
+          window.location.href = "/user";
+        }, 2000);
+      }
+    }
+  } catch (error) {
+    console.error("Signup error:", error);
+    alert("An unexpected error occurred.");
+  }
+});
+
+// Función para buscar el nodo
+async function searchNode() {
+  const nodeId = document.getElementById("nodeSearch").value.trim();
+  const searchBtn = document.getElementById("searchNodeBtn");
+  const resultDiv = document.getElementById("nodeSearchResult");
+  
+  if (!nodeId) {
+    alert("Please enter a Node ID");
+    return;
+  }
+
+  // Mostrar loading
+  searchBtn.innerHTML = '<span class="loading-spinner"></span> Searching...';
+  searchBtn.disabled = true;
+  
+  try {
+    const response = await fetch(`http://localhost:1880/node_enable?id_node=${encodeURIComponent(nodeId)}`);
+    const result = await response.json();
+    
+    resultDiv.style.display = "block";
+    resultDiv.classList.add("fade-in");
+    
+    if (result.success) {
+      // Nodo disponible
+      resultDiv.innerHTML = `
+        <div class="alert alert-success">
+          <h5><i class="fas fa-check-circle"></i> Node Available!</h5>
+          <div class="node-info">
+            <h5>Node Details:</h5>
+            <div class="node-detail"><strong>ID:</strong> ${result.node.id_node}</div>
+            <div class="node-detail"><strong>Location:</strong> ${result.node.location}</div>
+            <div class="node-detail"><strong>Description:</strong> ${result.node.description}</div>
+          </div>
+          <button type="button" id="proceedBtn" class="btn btn-success mt-3">
+            <i class="fas fa-arrow-right"></i> Proceed to Register Owner
+          </button>
+        </div>
+      `;
+      
+      // Guardar el ID del nodo validado
+      validatedNodeId = result.node.id_node;
+      
+      // Event listener para el botón de proceder
+      document.getElementById("proceedBtn").addEventListener("click", function() {
+        // Ocultar sección de búsqueda y mostrar formulario
+        document.getElementById("nodeSearchSection").style.display = "none";
+        document.getElementById("ownerFormSection").style.display = "block";
+        document.getElementById("ownerFormSection").classList.add("fade-in");
+        
+        // Asignar el ID del nodo al campo oculto
+        document.getElementById("id_node").value = validatedNodeId;
+      });
+      
+    } else {
+      // Nodo no disponible
+      resultDiv.innerHTML = `
+        <div class="alert alert-danger">
+          <h5><i class="fas fa-times-circle"></i> Node Not Available</h5>
+          <p>${result.message}</p>
+          <button type="button" class="btn btn-warning mt-2" onclick="window.location.href='/user'">
+            <i class="fas fa-home"></i> Return to User Panel
+          </button>
+        </div>
+      `;
+    }
+    
+  } catch (error) {
+    console.error("Search error:", error);
+    resultDiv.style.display = "block";
+    resultDiv.innerHTML = `
+      <div class="alert alert-danger">
+        <h5><i class="fas fa-exclamation-triangle"></i> Search Error</h5>
+        <p>An error occurred while searching for the node. Please try again.</p>
+      </div>
+    `;
+  } finally {
+    // Restaurar botón
+    searchBtn.innerHTML = '<i class="fas fa-search"></i> Search';
+    searchBtn.disabled = false;
+  }
+}
+</script>
+
+<%- include("partials/footer") %>
