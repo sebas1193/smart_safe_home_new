@@ -66,6 +66,9 @@ app.post('/auth', async (req, res) => {
         res.send("Error al autenticar al usuario"); 
     } 
 });
+
+app.get('/sign_up', (req, res) => res.render('sign_up'));
+
 app.get('/status_logs_owner', async (req, res) => {
     try {
         const { user_id, owner_id } = req.query;
