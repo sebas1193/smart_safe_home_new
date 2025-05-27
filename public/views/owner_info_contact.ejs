@@ -20,7 +20,7 @@
 
           <!-- Owner Name -->
           <div class="text-center mb-4">
-            <h3 class="text-primary">
+            <h3 class="text-primary" id="owner-name">
               <%= ownerInfo.first_name %> <%= ownerInfo.last_name %>
             </h3>
           </div>
@@ -31,7 +31,7 @@
               <i class="fas fa-phone text-success me-3"></i>
               <div>
                 <strong>Phone:</strong> 
-                <a href="tel:<%= ownerInfo.phone %>" class="text-decoration-none ms-2">
+                <a href="tel:<%= ownerInfo.phone %>" class="text-decoration-none ms-2" id="owner-phone">
                   <%= ownerInfo.phone %>
                 </a>
               </div>
@@ -41,7 +41,7 @@
               <i class="fas fa-map-marker-alt text-warning me-3"></i>
               <div>
                 <strong>Address:</strong> 
-                <span class="ms-2"><%= ownerInfo.address %></span>
+                <span class="ms-2" id="owner-address"><%= ownerInfo.address %></span>
               </div>
             </li>
             
@@ -49,7 +49,7 @@
               <i class="fas fa-calendar-plus text-info me-3"></i>
               <div>
                 <strong>Created:</strong> 
-                <span class="ms-2">
+                <span class="ms-2" id="owner-created">
                   <%= new Date(ownerInfo.created_at).toLocaleDateString('en-US', { 
                     year: 'numeric', 
                     month: 'long', 
@@ -67,7 +67,7 @@
               <i class="fas fa-calendar-check text-secondary me-3"></i>
               <div>
                 <strong>Updated:</strong> 
-                <span class="ms-2">
+                <span class="ms-2" id="owner-updated">
                   <%= new Date(ownerInfo.updated_at).toLocaleDateString('en-US', { 
                     year: 'numeric', 
                     month: 'long', 
@@ -88,14 +88,76 @@
               <a href="/user" class="btn btn-primary btn-lg">
                 <i class="fas fa-arrow-left"></i> Back to Dashboard
               </a>
-              <a href="/edit_owner?id_owner=<%= ownerInfo.id %>" class="btn btn-success btn-lg">
+              <button type="button" class="btn btn-success btn-lg" data-toggle="modal" data-target="#updateModal" id="updateInfoBtn">
                 <i class="fas fa-edit"></i> Update Info
-              </a>
+              </button>
             </div>
           </div>
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Update Modal -->
+<div class="modal fade" id="updateModal" tabindex="-1" aria-labelledby="updateModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title" id="updateModalLabel">
+          <i class="fas fa-edit"></i> Update Owner Information
+        </h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="updateForm">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="first_name" class="form-label">
+              <i class="fas fa-user"></i> First Name
+            </label>
+            <input type="text" class="form-control" id="first_name" name="first_name" value="<%= ownerInfo.first_name %>" required>
+          </div>
+          
+          <div class="mb-3">
+            <label for="last_name" class="form-label">
+              <i class="fas fa-user"></i> Last Name
+            </label>
+            <input type="text" class="form-control" id="last_name" name="last_name" value="<%= ownerInfo.last_name %>" required>
+          </div>
+          
+          <div class="mb-3">
+            <label for="phone" class="form-label">
+              <i class="fas fa-phone"></i> Phone
+            </label>
+            <input type="tel" class="form-control" id="phone" name="phone" value="<%= ownerInfo.phone %>" required>
+          </div>
+          
+          <div class="mb-3">
+            <label for="address" class="form-label">
+              <i class="fas fa-map-marker-alt"></i> Address
+            </label>
+            <textarea class="form-control" id="address" name="address" rows="3" required><%= ownerInfo.address %></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="fas fa-times"></i> Cancel
+          </button>
+          <button type="submit" class="btn btn-success" id="updateBtn">
+            <i class="fas fa-save"></i> Update Information
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="loading-overlay d-none">
+  <div class="loading-content">
+    <div class="spinner-border text-primary" role="status"></div>
   </div>
 </div>
 
@@ -131,6 +193,52 @@
   margin: 0 5px;
 }
 
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.loading-content {
+  background: transparent;
+  padding: 1rem;
+  text-align: center;
+}
+
+.loading-content .spinner-border {
+  width: 3rem;
+  height: 3rem;
+}
+
+.btn-close-white {
+  filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+.close {
+  color: white;
+  opacity: 1;
+}
+
+.close:hover {
+  color: white;
+  opacity: 0.7;
+}
+
+.modal {
+  z-index: 1050;
+}
+
+.modal.show {
+  display: block !important;
+}
+
 @media (max-width: 576px) {
   .btn-group {
     flex-direction: column;
@@ -141,5 +249,143 @@
   }
 }
 </style>
+
+<script>
+// Variables globales
+const ownerData = {
+  id: <%= ownerInfo.id %>,
+  first_name: '<%= ownerInfo.first_name %>',
+  last_name: '<%= ownerInfo.last_name %>',
+  phone: '<%= ownerInfo.phone %>',
+  address: '<%= ownerInfo.address %>'
+};
+
+const username = '<%= user %>';
+
+// Event listener para abrir el modal (compatible con Bootstrap 4 y 5)
+document.getElementById('updateInfoBtn').addEventListener('click', function() {
+  // Intentar Bootstrap 5 primero, luego Bootstrap 4
+  if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+    // Bootstrap 5
+    const modal = new bootstrap.Modal(document.getElementById('updateModal'));
+    modal.show();
+  } else if (typeof $ !== 'undefined' && $.fn.modal) {
+    // Bootstrap 4 con jQuery
+    $('#updateModal').modal('show');
+  } else {
+    // Fallback manual
+    document.getElementById('updateModal').style.display = 'block';
+    document.getElementById('updateModal').classList.add('show');
+  }
+});
+
+// Event listener para cerrar el modal manualmente
+document.querySelectorAll('[data-dismiss="modal"]').forEach(btn => {
+  btn.addEventListener('click', function() {
+    if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+      const modal = bootstrap.Modal.getInstance(document.getElementById('updateModal'));
+      if (modal) modal.hide();
+    } else if (typeof $ !== 'undefined' && $.fn.modal) {
+      $('#updateModal').modal('hide');
+    } else {
+      document.getElementById('updateModal').style.display = 'none';
+      document.getElementById('updateModal').classList.remove('show');
+    }
+  });
+});
+
+// Event listener para el formulario de actualización
+document.getElementById('updateForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  
+  const updateBtn = document.getElementById('updateBtn');
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  
+  // Obtener datos del formulario
+  const formData = new FormData(this);
+  const updateData = {
+    username: username,
+    owner_id: ownerData.id,
+    first_name: formData.get('first_name'),
+    last_name: formData.get('last_name'),
+    phone: formData.get('phone'),
+    address: formData.get('address')
+  };
+  
+  // Verificar si hay cambios
+  const hasChanges = 
+    updateData.first_name !== ownerData.first_name ||
+    updateData.last_name !== ownerData.last_name ||
+    updateData.phone !== ownerData.phone ||
+    updateData.address !== ownerData.address;
+  
+  if (!hasChanges) {
+    alert('No changes detected. Please modify at least one field.');
+    return;
+  }
+  
+  // Mostrar loading
+  updateBtn.disabled = true;
+  updateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+  loadingOverlay.classList.remove('d-none');
+  
+  try {
+    // Construir URL con query parameters
+    const queryParams = new URLSearchParams(updateData).toString();
+    const response = await fetch(`http://localhost:1880/update_owner_info?${queryParams}`, {
+      method: 'PUT'
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      // Mostrar mensaje de éxito
+      alert('Information updated successfully!');
+      
+      // Cerrar modal
+      if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        const modal = bootstrap.Modal.getInstance(document.getElementById('updateModal'));
+        if (modal) modal.hide();
+      } else if (typeof $ !== 'undefined' && $.fn.modal) {
+        $('#updateModal').modal('hide');
+      } else {
+        document.getElementById('updateModal').style.display = 'none';
+        document.getElementById('updateModal').classList.remove('show');
+      }
+      
+      // Recargar la página para mostrar los cambios
+      window.location.reload();
+    } else {
+      throw new Error(result.message || 'Error updating information');
+    }
+  } catch (error) {
+    console.error('Update error:', error);
+    alert('Error updating information: ' + error.message);
+  } finally {
+    // Restaurar botón
+    updateBtn.disabled = false;
+    updateBtn.innerHTML = '<i class="fas fa-save"></i> Update Information';
+    loadingOverlay.classList.add('d-none');
+  }
+});
+
+// Validación en tiempo real
+document.addEventListener('DOMContentLoaded', function() {
+  const form = document.getElementById('updateForm');
+  const inputs = form.querySelectorAll('input, textarea');
+  
+  inputs.forEach(input => {
+    input.addEventListener('input', function() {
+      // Validación básica
+      if (this.value.trim() === '') {
+        this.classList.add('is-invalid');
+      } else {
+        this.classList.remove('is-invalid');
+        this.classList.add('is-valid');
+      }
+    });
+  });
+});
+</script>
 
 <%- include("partials/footer") %>
