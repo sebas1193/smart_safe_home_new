@@ -96,7 +96,7 @@ app.get('/status_logs_owner', async (req, res) => {
 });
 
 // Agregar esta ruta en tu index.js después de las otras rutas
-
+// trae datos del owner.
 app.get('/owner_info_contact', isAuthenticated, async (req, res) => {
   try {
     const { id_owner } = req.query;
@@ -132,20 +132,79 @@ app.get('/owner_info_contact', isAuthenticated, async (req, res) => {
   }
 });
 // Vistas según rol
-app.get('/admin', (req, res) => { 
+// Reemplaza tu ruta /admin actual con esta versión mejorada
+
+// Reemplaza tu ruta /admin actual con esta versión
+
+app.get('/admin', async (req, res) => { 
     if (req.session.loggedin && req.session.role === 'admin') { 
-        return res.render('admin', { 
-            user: req.session.user,
-            userId: req.session.userId,
-            firstName: req.session.firstName,
-            lastName: req.session.lastName,
-            role: req.session.role,
-            userData: req.session.userData // Todos los datos en un objeto
-        }); 
+        try {
+            // Llamar a todos los endpoints en paralelo
+            const [logsResponse, countResponse, activeNodesResponse, inactiveNodesResponse] = await Promise.all([
+                axios.get(`http://localhost:1880/get_all_info_nodes_users?username=${encodeURIComponent(req.session.user)}`),
+                axios.get(`http://localhost:1880/count_house_owners?username=${encodeURIComponent(req.session.user)}`),
+                axios.get(`http://localhost:1880/count_active_nodes?username=${encodeURIComponent(req.session.user)}`),
+                axios.get(`http://localhost:1880/count_inactive_nodes?username=${encodeURIComponent(req.session.user)}`)
+            ]);
+
+            const logsResult = logsResponse.data;
+            const countResult = countResponse.data;
+            const activeNodesResult = activeNodesResponse.data;
+            const inactiveNodesResult = inactiveNodesResponse.data;
+
+            // Renderizar vista con todos los datos
+            return res.render('admin', { 
+                user: req.session.user,
+                userId: req.session.userId,
+                firstName: req.session.firstName,
+                lastName: req.session.lastName,
+                role: req.session.role,
+                userData: req.session.userData,
+                logs: logsResult.success ? logsResult.data : [],
+                totalOwners: countResult.success ? countResult.data.total_house_owners : 0,
+                ownersMessage: countResult.success ? countResult.data.message : "0 elderly monitored",
+                activeNodes: activeNodesResult.success ? activeNodesResult.data.active_nodes : 0,
+                inactiveNodes: inactiveNodesResult.success ? inactiveNodesResult.data.inactive_nodes : 0
+            });
+        } catch (error) {
+            console.error('Error fetching admin data:', error);
+            // En caso de error, renderizar con datos vacíos
+            return res.render('admin', { 
+                user: req.session.user,
+                userId: req.session.userId,
+                firstName: req.session.firstName,
+                lastName: req.session.lastName,
+                role: req.session.role,
+                userData: req.session.userData,
+                logs: [],
+                totalOwners: 0,
+                ownersMessage: "Error loading data",
+                activeNodes: 0,
+                inactiveNodes: 0
+            });
+        }
     } 
     res.redirect('/login'); 
-}); 
- 
+});
+
+// Agregar esta ruta en tu index.js
+
+app.get('/create_admin', isAuthenticated, (req, res) => {
+  // Solo admins pueden acceder a crear otros admins
+  if (req.session.role !== 'admin') {
+    return res.redirect('/login');
+  }
+
+  res.render('create_admin', {
+    user: req.session.user,
+    userId: req.session.userId,
+    firstName: req.session.firstName,
+    lastName: req.session.lastName,
+    role: req.session.role,
+    userData: req.session.userData
+  });
+});
+
 app.get('/user', (req, res) => { 
     if (req.session.loggedin && req.session.role === 'emergency_contact') { 
         return res.render('user', { 
