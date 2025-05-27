@@ -1,0 +1,358 @@
+<%- include("partials/header") %>
+<%- include("partials/nav_logout") %>
+
+<div class="container mt-5">
+  <!-- Breadcrumb Navigation -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="/admin">Admin Panel</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Create New Admin</li>
+    </ol>
+  </nav>
+
+  <div class="row justify-content-center">
+    <div class="col-12 col-md-10 col-lg-8">
+      <div class="card">
+        <div class="card-header bg-danger text-white">
+          <h4 class="mb-0">
+            <i class="fas fa-user-plus"></i> Create New Administrator
+          </h4>
+        </div>
+        <div class="card-body">
+          <!-- Current Admin Info -->
+          <div class="alert alert-info mb-4">
+            <div class="d-flex align-items-center">
+              <i class="fas fa-info-circle fa-2x me-3"></i>
+              <div>
+                <h6 class="alert-heading mb-1">Creating admin as:</h6>
+                <p class="mb-0">
+                  <strong><%= firstName %> <%= lastName %></strong> (@<%= user %>)
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Create Admin Form -->
+          <form id="createAdminForm">
+            <!-- Username and Password Row -->
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group mb-3">
+                  <label for="new_username" class="form-label">
+                    <i class="fas fa-user"></i> Username *
+                  </label>
+                  <input 
+                    type="text" 
+                    name="new_username" 
+                    id="new_username" 
+                    class="form-control" 
+                    placeholder="Enter username"
+                    required>
+                  <small class="form-text text-muted">Must be unique</small>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group mb-3">
+                  <label for="password" class="form-label">
+                    <i class="fas fa-lock"></i> Password *
+                  </label>
+                  <input 
+                    type="password" 
+                    name="password" 
+                    id="password" 
+                    class="form-control" 
+                    placeholder="Enter secure password"
+                    required>
+                  <small class="form-text text-muted">Minimum 8 characters</small>
+                </div>
+              </div>
+            </div>
+
+            <!-- Name Row -->
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group mb-3">
+                  <label for="first_name" class="form-label">
+                    <i class="fas fa-id-card"></i> First Name *
+                  </label>
+                  <input 
+                    type="text" 
+                    name="first_name" 
+                    id="first_name" 
+                    class="form-control" 
+                    placeholder="Enter first name"
+                    required>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group mb-3">
+                  <label for="last_name" class="form-label">
+                    <i class="fas fa-id-card"></i> Last Name *
+                  </label>
+                  <input 
+                    type="text" 
+                    name="last_name" 
+                    id="last_name" 
+                    class="form-control" 
+                    placeholder="Enter last name"
+                    required>
+                </div>
+              </div>
+            </div>
+
+            <!-- Contact Row -->
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group mb-3">
+                  <label for="email" class="form-label">
+                    <i class="fas fa-envelope"></i> Email *
+                  </label>
+                  <input 
+                    type="email" 
+                    name="email" 
+                    id="email" 
+                    class="form-control" 
+                    placeholder="admin@example.com"
+                    required>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group mb-3">
+                  <label for="phone" class="form-label">
+                    <i class="fas fa-phone"></i> Phone *
+                  </label>
+                  <input 
+                    type="tel" 
+                    name="phone" 
+                    id="phone" 
+                    class="form-control" 
+                    placeholder="1234567890"
+                    required>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="row mt-4">
+              <div class="col-12">
+                <div class="d-flex justify-content-between">
+                  <a href="/admin" class="btn btn-secondary btn-lg">
+                    <i class="fas fa-arrow-left"></i> Back to Admin Panel
+                  </a>
+                  <button type="submit" class="btn btn-danger btn-lg" id="createBtn">
+                    <i class="fas fa-user-plus"></i> Create Administrator
+                  </button>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="loading-overlay d-none">
+  <div class="loading-content">
+    <div class="spinner-border text-danger" role="status"></div>
+  </div>
+</div>
+
+<style>
+.card {
+  border: 1px solid #dee2e6;
+  border-radius: 0.375rem;
+  margin-bottom: 1rem;
+}
+
+.form-control {
+  border: 2px solid #e1e5e9;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 16px;
+  transition: border-color 0.3s ease;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: #dc3545;
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+.form-control.is-valid {
+  border-color: #28a745;
+}
+
+.form-control.is-invalid {
+  border-color: #dc3545;
+}
+
+.btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.loading-content {
+  background: transparent;
+  padding: 1rem;
+  text-align: center;
+}
+
+.loading-content .spinner-border {
+  width: 3rem;
+  height: 3rem;
+}
+
+.breadcrumb {
+  background-color: #f8f9fa;
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+}
+
+.breadcrumb-item + .breadcrumb-item::before {
+  content: ">";
+}
+
+.alert {
+  border-radius: 8px;
+}
+
+.me-3 {
+  margin-right: 1rem !important;
+}
+
+@media (max-width: 768px) {
+  .d-flex.justify-content-between {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .btn-lg {
+    width: 100%;
+  }
+}
+</style>
+
+<script>
+// Variables globales
+const currentAdminUsername = '<%= user %>';
+
+// Event listener para el formulario
+document.getElementById("createAdminForm").addEventListener("submit", async function (e) {
+  e.preventDefault();
+
+  const createBtn = document.getElementById('createBtn');
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  
+  // Obtener datos del formulario
+  const formData = new FormData(this);
+  const adminData = {
+    username: currentAdminUsername,
+    new_username: formData.get('new_username'),
+    password: formData.get('password'),
+    first_name: formData.get('first_name'),
+    last_name: formData.get('last_name'),
+    email: formData.get('email'),
+    phone: formData.get('phone')
+  };
+  
+  // Validaciones básicas
+  if (adminData.password.length < 8) {
+    alert('Password must be at least 8 characters long');
+    return;
+  }
+
+  if (!adminData.email.includes('@')) {
+    alert('Please enter a valid email address');
+    return;
+  }
+  
+  // Mostrar loading
+  createBtn.disabled = true;
+  createBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+  loadingOverlay.classList.remove('d-none');
+  
+  try {
+    // Construir URL con query parameters
+    const queryParams = new URLSearchParams(adminData).toString();
+    const response = await fetch(`http://localhost:1880/sign_up_admin?${queryParams}`, {
+      method: 'POST'
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      // Mostrar mensaje de éxito
+      alert(`Administrator created successfully!\n\nUsername: ${result.data.username}\nName: ${result.data.first_name} ${result.data.last_name}\nEmail: ${result.data.email}`);
+      
+      // Redirigir al panel de admin
+      window.location.href = '/admin';
+    } else {
+      throw new Error(result.message || 'Error creating administrator');
+    }
+  } catch (error) {
+    console.error('Create admin error:', error);
+    alert('Error creating administrator: ' + error.message);
+    
+    // Si es un error de autorización, redirigir
+    if (error.message.includes('not an admin') || error.message.includes('not found')) {
+      setTimeout(() => {
+        window.location.href = '/admin';
+      }, 2000);
+    }
+  } finally {
+    // Restaurar botón
+    createBtn.disabled = false;
+    createBtn.innerHTML = '<i class="fas fa-user-plus"></i> Create Administrator';
+    loadingOverlay.classList.add('d-none');
+  }
+});
+
+// Validación en tiempo real
+document.addEventListener('DOMContentLoaded', function() {
+  const form = document.getElementById('createAdminForm');
+  const inputs = form.querySelectorAll('input[required]');
+  
+  inputs.forEach(input => {
+    input.addEventListener('input', function() {
+      // Validación básica
+      if (this.value.trim() === '') {
+        this.classList.remove('is-valid');
+        this.classList.add('is-invalid');
+      } else if (this.type === 'email' && !this.value.includes('@')) {
+        this.classList.remove('is-valid');
+        this.classList.add('is-invalid');
+      } else if (this.type === 'password' && this.value.length < 8) {
+        this.classList.remove('is-valid');
+        this.classList.add('is-invalid');
+      } else {
+        this.classList.remove('is-invalid');
+        this.classList.add('is-valid');
+      }
+    });
+  });
+});
+</script>
+
+<%- include("partials/footer") %>
