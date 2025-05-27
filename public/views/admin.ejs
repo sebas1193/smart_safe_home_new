@@ -1,0 +1,953 @@
+<%- include('partials/header') %>
+<%- include('partials/nav_logout') %>
+
+<div class="container-fluid mt-4">
+  <!-- Admin Info Row -->
+  <div class="row mb-4">
+    <!-- Admin Profile Card - Más pequeño y cuadrado -->
+    <div class="col-lg-4 col-md-6">
+      <div class="card admin-profile-card">
+        <div class="card-header bg-success text-white">
+          <h5 class="mb-0">
+            <i class="fas fa-user-shield"></i> Administration Panel
+          </h5>
+        </div>
+        <div class="card-body text-center">
+          <!-- Admin Avatar -->
+          <div class="admin-avatar mb-2">
+            <i class="fas fa-user-tie"></i>
+          </div>
+          
+          <!-- Admin Info -->
+          <h6 class="admin-name"><%= firstName %> <%= lastName %></h6>
+          <p class="admin-role">
+            <span class="badge badge-danger"><%= role %></span>
+          </p>
+          
+          <div class="admin-details">
+            <div class="detail-item">
+              <i class="fas fa-id-badge"></i>
+              <span>ID: <%= userId %></span>
+            </div>
+            <div class="detail-item">
+              <i class="fas fa-user"></i>
+              <span>@<%= user %></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Buttons - Más pequeño y cuadrado -->
+    <div class="col-lg-4 col-md-6">
+      <div class="card action-buttons-card">
+        <div class="card-header bg-warning text-dark">
+          <h5 class="mb-0">
+            <i class="fas fa-tools"></i> Admin Actions
+          </h5>
+        </div>
+        <div class="card-body d-flex justify-content-center align-items-center">
+          <div class="btn-group-vertical w-100" role="group">
+            <button type="button" class="btn btn-outline-primary btn-lg mb-2" onclick="window.location.href='/create_node'">
+              <i class="fas fa-plus-circle"></i> Create Node
+            </button>
+            <button type="button" class="btn btn-outline-danger btn-lg mb-2" onclick="window.location.href='/create_admin'">
+              <i class="fas fa-user-plus"></i> Create Admin
+            </button>
+            <button type="button" class="btn btn-outline-success btn-lg" onclick="window.location.href='/update_user'">
+              <i class="fas fa-edit"></i> Update Profile
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty column to maintain layout -->
+    <div class="col-lg-4 col-md-12"></div>
+  </div>
+
+  <!-- Stats Row -->
+  <div class="row mb-4">
+    <!-- Elderly Monitored -->
+    <div class="col-lg-4 col-md-6 mb-3">
+      <div class="card stats-card">
+        <div class="card-header bg-info text-white">
+          <h6 class="mb-0">
+            <i class="fas fa-home"></i> Monitoring
+          </h6>
+        </div>
+        <div class="card-body text-center">
+          <div class="stat-number text-info">
+            <%= totalOwners %>
+          </div>
+          <div class="stat-label">
+            Elderly Monitored
+          </div>
+          <div class="stat-icon">
+            <i class="fas fa-heartbeat"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Nodes -->
+    <div class="col-lg-4 col-md-6 mb-3">
+      <div class="card stats-card">
+        <div class="card-header bg-success text-white">
+          <h6 class="mb-0">
+            <i class="fas fa-check-circle"></i> Active Nodes
+          </h6>
+        </div>
+        <div class="card-body text-center">
+          <div class="stat-number text-success" id="activeNodesCount">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+          </div>
+          <div class="stat-label">
+            Nodes with Owners
+          </div>
+          <div class="stat-icon">
+            <i class="fas fa-link"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Available Nodes - Clickable -->
+    <div class="col-lg-4 col-md-6 mb-3">
+      <div class="card stats-card clickable-card" onclick="showAvailableNodes()">
+        <div class="card-header bg-secondary text-white">
+          <h6 class="mb-0">
+            <i class="fas fa-times-circle"></i> Available Nodes
+          </h6>
+        </div>
+        <div class="card-body text-center">
+          <div class="stat-number text-secondary" id="inactiveNodesCount">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+          </div>
+          <div class="stat-label">
+            Nodes Available
+          </div>
+          <div class="stat-icon">
+            <i class="fas fa-unlink"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Available Nodes Modal -->
+  <div id="availableNodesModal" class="nodes-modal d-none">
+    <div class="nodes-modal-content">
+      <div class="nodes-modal-header">
+        <h5><i class="fas fa-list"></i> Available Nodes</h5>
+        <button type="button" class="close-btn" onclick="closeAvailableNodes()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="nodes-modal-body" id="availableNodesContent">
+        <!-- Content will be loaded here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- System Status Logs -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+          <h4 class="mb-0">
+            <i class="fas fa-chart-line"></i> System Status Logs
+          </h4>
+          <div class="d-flex align-items-center">
+            <span class="badge badge-light me-2" id="totalLogs">Total: 0</span>
+            <button class="btn btn-light btn-sm" onclick="refreshLogs()">
+              <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <!-- Filter Buttons -->
+          <div class="filter-section mb-3">
+            <strong>Filter by Status:</strong>
+            <div class="btn-group ms-2" role="group">
+              <button type="button" class="btn btn-outline-secondary filter-btn active" data-filter="all">
+                <i class="fas fa-list"></i> All
+              </button>
+              <button type="button" class="btn btn-outline-success filter-btn" data-filter="normal">
+                <i class="fas fa-check-circle"></i> Normal (0-1)
+              </button>
+              <button type="button" class="btn btn-outline-warning filter-btn" data-filter="warning">
+                <i class="fas fa-exclamation-triangle"></i> Warning (2-3)
+              </button>
+              <button type="button" class="btn btn-outline-danger filter-btn" data-filter="critical">
+                <i class="fas fa-times-circle"></i> Critical (4-5)
+              </button>
+            </div>
+          </div>
+
+          <!-- Logs Container -->
+          <div id="logs-container" class="row">
+            <!-- Los logs se cargarán aquí dinámicamente -->
+          </div>
+
+          <!-- Pagination -->
+          <nav aria-label="Logs pagination" class="mt-4">
+            <ul id="logs-pagination" class="pagination justify-content-center">
+              <!-- La paginación se generará dinámicamente -->
+            </ul>
+          </nav>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="loading-overlay d-none">
+  <div class="loading-content">
+    <div class="spinner-border text-primary" role="status"></div>
+  </div>
+</div>
+
+<style>
+/* Admin Profile Card Styles - Más pequeño y cuadrado */
+.admin-profile-card {
+  height: 280px;
+}
+
+.admin-avatar {
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, #007bff, #0056b3);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.admin-avatar i {
+  font-size: 2rem;
+  color: white;
+}
+
+.admin-name {
+  color: #333;
+  font-weight: 600;
+  margin-bottom: 8px;
+  font-size: 1rem;
+}
+
+.admin-role {
+  margin-bottom: 15px;
+}
+
+.admin-details {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.detail-item i {
+  font-size: 1rem;
+  margin-bottom: 3px;
+  color: #007bff;
+}
+
+/* Action Buttons Card - Más pequeño y cuadrado */
+.action-buttons-card {
+  height: 280px;
+}
+
+.btn-group-vertical .btn {
+  font-size: 0.9rem;
+  padding: 10px 16px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.btn-group-vertical .btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* Stats Card Styles - Más compactas */
+.stats-card {
+  height: 180px;
+  transition: transform 0.2s ease;
+}
+
+.stats-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.clickable-card {
+  cursor: pointer;
+}
+
+.clickable-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+}
+
+.stat-number {
+  font-size: 2.5rem;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 15px;
+}
+
+.stat-icon {
+  font-size: 1.5rem;
+  opacity: 0.7;
+}
+
+/* Nodes Modal Styles */
+.nodes-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.nodes-modal-content {
+  background: white;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+.nodes-modal-header {
+  background: #6c757d;
+  color: white;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: between;
+  align-items: center;
+}
+
+.nodes-modal-header h5 {
+  margin: 0;
+  flex-grow: 1;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.close-btn:hover {
+  background-color: rgba(255,255,255,0.2);
+}
+
+.nodes-modal-body {
+  padding: 20px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.node-item {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 10px;
+  transition: transform 0.2s ease;
+}
+
+.node-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.node-header {
+  display: flex;
+  justify-content: between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.node-id {
+  font-weight: bold;
+  color: #007bff;
+  font-size: 1.1rem;
+}
+
+.node-location {
+  background: #007bff;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+}
+
+.node-description {
+  color: #666;
+  font-size: 0.9rem;
+  margin-top: 5px;
+}
+
+/* Filter Section */
+.filter-section {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.filter-btn {
+  margin: 0 2px;
+  transition: all 0.3s ease;
+}
+
+.filter-btn.active {
+  background-color: #007bff;
+  border-color: #007bff;
+  color: white;
+}
+
+.filter-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* Log Card Styles */
+.log-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.log-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.log-card-normal {
+  background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+  border-left: 4px solid #28a745;
+}
+
+.log-card-warning {
+  background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+  border-left: 4px solid #ffc107;
+}
+
+.log-card-critical {
+  background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+  border-left: 4px solid #dc3545;
+}
+
+.log-header {
+  display: flex;
+  justify-content: between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.log-node {
+  font-weight: bold;
+  font-size: 1.1em;
+}
+
+.log-time {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.log-location {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.8em;
+  font-weight: 500;
+  margin-bottom: 5px;
+}
+
+.log-description {
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.loading-content {
+  background: transparent;
+  padding: 1rem;
+  text-align: center;
+}
+
+.loading-content .spinner-border {
+  width: 3rem;
+  height: 3rem;
+}
+
+/* Utility Classes */
+.me-2 {
+  margin-right: 0.5rem !important;
+}
+
+.ms-2 {
+  margin-left: 0.5rem !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .admin-details {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .detail-item {
+    flex-direction: row;
+    gap: 5px;
+  }
+  
+  .filter-section {
+    text-align: center;
+  }
+  
+  .filter-section .btn-group {
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  
+  .stat-number {
+    font-size: 2rem;
+  }
+  
+  .btn-group-vertical .btn {
+    font-size: 0.9rem;
+    padding: 10px 15px;
+  }
+
+  .nodes-modal-content {
+    width: 95%;
+    margin: 10px;
+  }
+}
+
+@media (max-width: 576px) {
+  .admin-profile-card,
+  .action-buttons-card,
+  .stats-card {
+    height: auto;
+    margin-bottom: 15px;
+  }
+  
+  .admin-profile-card .admin-details {
+    flex-direction: row;
+    justify-content: space-around;
+  }
+}
+</style>
+
+<script>
+// Variables globales
+let allLogs = <%- JSON.stringify(logs) %>;
+let filteredLogs = [...allLogs];
+const logsPerPage = 6;
+let currentPage = 1;
+let currentFilter = 'all';
+
+// Función para obtener la clase CSS según el status_alert
+function getLogCardClass(statusAlert) {
+  if (statusAlert === 0 || statusAlert === 1) return 'log-card-normal';
+  if (statusAlert === 2 || statusAlert === 3) return 'log-card-warning';
+  if (statusAlert === 4 || statusAlert === 5) return 'log-card-critical';
+  return 'log-card-normal';
+}
+
+// Función para obtener el ícono según la ubicación
+function getLocationIcon(location) {
+  switch(location) {
+    case 'kitchen': return 'fas fa-utensils';
+    case 'living_room': return 'fas fa-couch';
+    case 'front_door': return 'fas fa-door-open';
+    default: return 'fas fa-home';
+  }
+}
+
+// Función para formatear fecha
+function formatDate(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+// Función para obtener estadísticas de nodos
+async function fetchNodesStats() {
+  try {
+    const [activeResponse, inactiveResponse] = await Promise.all([
+      fetch(`http://localhost:1880/count_active_nodes?username=${encodeURIComponent('<%= user %>')}`),
+      fetch(`http://localhost:1880/count_inactive_nodes?username=${encodeURIComponent('<%= user %>')}`)
+    ]);
+
+    const activeResult = await activeResponse.json();
+    const inactiveResult = await inactiveResponse.json();
+
+    if (activeResult.success) {
+      document.getElementById('activeNodesCount').textContent = activeResult.data.active_nodes;
+    } else {
+      document.getElementById('activeNodesCount').textContent = '0';
+    }
+
+    if (inactiveResult.success) {
+      document.getElementById('inactiveNodesCount').textContent = inactiveResult.data.inactive_nodes;
+    } else {
+      document.getElementById('inactiveNodesCount').textContent = '0';
+    }
+
+  } catch (error) {
+    console.error('Error fetching nodes stats:', error);
+    document.getElementById('activeNodesCount').textContent = 'Error';
+    document.getElementById('inactiveNodesCount').textContent = 'Error';
+  }
+}
+
+// Función para mostrar nodos disponibles
+async function showAvailableNodes() {
+  const modal = document.getElementById('availableNodesModal');
+  const content = document.getElementById('availableNodesContent');
+  
+  // Mostrar loading
+  content.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><p class="mt-2">Loading available nodes...</p></div>';
+  modal.classList.remove('d-none');
+  
+  try {
+    const response = await fetch(`http://localhost:1880/available_nodes?username=${encodeURIComponent('<%= user %>')}`);
+    const result = await response.json();
+    
+    if (result.success) {
+      if (result.nodes.length === 0) {
+        content.innerHTML = '<div class="text-center text-muted"><i class="fas fa-info-circle fa-2x mb-3"></i><p>No available nodes found.</p></div>';
+      } else {
+        let html = '';
+        result.nodes.forEach(node => {
+          const locationIcon = getLocationIcon(node.location);
+          html += `
+            <div class="node-item">
+              <div class="node-header">
+                <span class="node-id"><i class="fas fa-microchip"></i> ${node.id_node}</span>
+                <span class="node-location"><i class="${locationIcon}"></i> ${node.location.replace('_', ' ')}</span>
+              </div>
+              <div class="node-description">
+                ${node.description || 'No description available'}
+              </div>
+            </div>
+          `;
+        });
+        content.innerHTML = html;
+      }
+    } else {
+      content.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> Error: ${result.message}</div>`;
+    }
+  } catch (error) {
+    console.error('Error fetching available nodes:', error);
+    content.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> Error loading available nodes</div>';
+  }
+}
+
+// Función para cerrar modal de nodos disponibles
+function closeAvailableNodes() {
+  const modal = document.getElementById('availableNodesModal');
+  modal.classList.add('d-none');
+}
+
+// Funciones para los botones de acción
+function createNode() {
+  alert('Create Node functionality will be implemented here');
+  // window.location.href = '/create_node';
+}
+
+function createAdmin() {
+  alert('Create Admin functionality will be implemented here');
+  // window.location.href = '/create_admin';
+}
+
+// Función para filtrar logs
+function filterLogs(filterType) {
+  currentFilter = filterType;
+  
+  if (filterType === 'all') {
+    filteredLogs = [...allLogs];
+  } else if (filterType === 'normal') {
+    filteredLogs = allLogs.filter(log => log.status_alert === 0 || log.status_alert === 1);
+  } else if (filterType === 'warning') {
+    filteredLogs = allLogs.filter(log => log.status_alert === 2 || log.status_alert === 3);
+  } else if (filterType === 'critical') {
+    filteredLogs = allLogs.filter(log => log.status_alert === 4 || log.status_alert === 5);
+  }
+  
+  // Actualizar botones activos
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  document.querySelector(`[data-filter="${filterType}"]`).classList.add('active');
+  
+  // Resetear a página 1 y renderizar
+  currentPage = 1;
+  renderLogsPage(1);
+  renderPagination();
+}
+
+// Función para renderizar los logs de una página
+function renderLogsPage(page) {
+  currentPage = page;
+  const container = document.getElementById('logs-container');
+  container.innerHTML = '';
+  
+  const startIndex = (page - 1) * logsPerPage;
+  const endIndex = startIndex + logsPerPage;
+  const pageLogs = filteredLogs.slice(startIndex, endIndex);
+  
+  if (pageLogs.length === 0) {
+    container.innerHTML = `
+      <div class="col-12">
+        <div class="alert alert-info text-center">
+          <i class="fas fa-info-circle"></i> No logs available for the selected filter.
+        </div>
+      </div>
+    `;
+    return;
+  }
+  
+  pageLogs.forEach(log => {
+    const cardClass = getLogCardClass(log.status_alert);
+    const locationIcon = getLocationIcon(log.location);
+    
+    const col = document.createElement('div');
+    col.className = 'col-lg-4 col-md-6 col-12';
+    
+    col.innerHTML = `
+      <div class="card log-card ${cardClass}" onclick="showLogDetails(${log.id})">
+        <div class="card-body">
+          <div class="log-header">
+            <div class="log-node">
+              <i class="fas fa-microchip"></i> ${log.id_node}
+            </div>
+            <div class="log-time">
+              <i class="fas fa-clock"></i> ${formatDate(log.recorded_at)}
+            </div>
+          </div>
+          
+          <div class="log-location bg-light text-dark">
+            <i class="${locationIcon}"></i> ${log.location.replace('_', ' ')}
+          </div>
+          
+          <div class="log-description">
+            ${log.description}
+          </div>
+          
+          <div class="mt-2">
+            <span class="badge ${log.status_alert <= 1 ? 'badge-success' : log.status_alert <= 3 ? 'badge-warning' : 'badge-danger'}">
+              Alert Level: ${log.status_alert}
+            </span>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    container.appendChild(col);
+  });
+  
+  // Actualizar contador total
+  document.getElementById('totalLogs').textContent = `Total: ${filteredLogs.length}`;
+}
+
+// Función para renderizar paginación (máximo 10 páginas)
+function renderPagination() {
+  const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
+  const pagination = document.getElementById('logs-pagination');
+  pagination.innerHTML = '';
+  
+  if (totalPages <= 1) return;
+  
+  // Calcular rango de páginas a mostrar (máximo 10)
+  const maxPagesToShow = 10;
+  let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+  let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+  
+  // Ajustar si estamos cerca del final
+  if (endPage - startPage + 1 < maxPagesToShow) {
+    startPage = Math.max(1, endPage - maxPagesToShow + 1);
+  }
+  
+  // Botón anterior
+  const prevLi = document.createElement('li');
+  prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+  prevLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${currentPage - 1})">‹</a>`;
+  pagination.appendChild(prevLi);
+  
+  // Primera página si no está en el rango
+  if (startPage > 1) {
+    const firstLi = document.createElement('li');
+    firstLi.className = 'page-item';
+    firstLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(1)">1</a>`;
+    pagination.appendChild(firstLi);
+    
+    if (startPage > 2) {
+      const dotsLi = document.createElement('li');
+      dotsLi.className = 'page-item disabled';
+      dotsLi.innerHTML = `<span class="page-link">...</span>`;
+      pagination.appendChild(dotsLi);
+    }
+  }
+  
+  // Números de página en el rango
+  for (let i = startPage; i <= endPage; i++) {
+    const li = document.createElement('li');
+    li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+    li.innerHTML = `<a class="page-link" href="#" onclick="changePage(${i})">${i}</a>`;
+    pagination.appendChild(li);
+  }
+  
+  // Última página si no está en el rango
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) {
+      const dotsLi = document.createElement('li');
+      dotsLi.className = 'page-item disabled';
+      dotsLi.innerHTML = `<span class="page-link">...</span>`;
+      pagination.appendChild(dotsLi);
+    }
+    
+    const lastLi = document.createElement('li');
+    lastLi.className = 'page-item';
+    lastLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${totalPages})">${totalPages}</a>`;
+    pagination.appendChild(lastLi);
+  }
+  
+  // Botón siguiente
+  const nextLi = document.createElement('li');
+  nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+  nextLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${currentPage + 1})">›</a>`;
+  pagination.appendChild(nextLi);
+}
+
+// Función para cambiar página
+function changePage(page) {
+  const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
+  if (page < 1 || page > totalPages) return;
+  
+  renderLogsPage(page);
+  renderPagination();
+  
+  // Scroll suave al top de los logs
+  document.getElementById('logs-container').scrollIntoView({ 
+    behavior: 'smooth', 
+    block: 'start' 
+  });
+}
+
+// Función para mostrar detalles del log
+function showLogDetails(logId) {
+  const log = allLogs.find(l => l.id === logId);
+  if (!log) return;
+  
+  alert(`Log Details:\n\nNode: ${log.id_node}\nLocation: ${log.location}\nAlert Level: ${log.status_alert}\nDescription: ${log.description}\nRecorded: ${new Date(log.recorded_at).toLocaleString()}`);
+}
+
+// Función para refrescar logs
+async function refreshLogs() {
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  loadingOverlay.classList.remove('d-none');
+  
+  try {
+    const response = await fetch(`http://localhost:1880/get_all_info_nodes_users?username=${encodeURIComponent('<%= user %>')}`);
+    const result = await response.json();
+    
+    if (result.success) {
+      allLogs = result.data;
+      filterLogs(currentFilter); // Aplicar filtro actual
+    } else {
+      alert('Error refreshing logs: ' + result.message);
+    }
+  } catch (error) {
+    console.error('Error refreshing logs:', error);
+    alert('Error refreshing logs');
+  } finally {
+    loadingOverlay.classList.add('d-none');
+  }
+}
+
+// Event listeners e inicialización
+document.addEventListener('DOMContentLoaded', function() {
+  // Cargar estadísticas de nodos
+  fetchNodesStats();
+  
+  // Inicializar logs
+  renderLogsPage(1);
+  renderPagination();
+  
+  // Agregar listeners a botones de filtro
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const filter = this.dataset.filter;
+      filterLogs(filter);
+    });
+  });
+
+  // Event listener para cerrar modal con Escape
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      closeAvailableNodes();
+    }
+  });
+
+  // Event listener para cerrar modal clickeando fuera
+  document.getElementById('availableNodesModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+      closeAvailableNodes();
+    }
+  });
+});
+</script>
+
+<%- include('partials/footer') %>

@@ -59,14 +59,6 @@ CREATE TABLE IF NOT EXISTS living_room (
     FOREIGN KEY (id_node) REFERENCES nodes(id_node) ON DELETE CASCADE
 );
 
--- 6. Acciones recibidas por ESP32: sala (living_room_actions)
-CREATE TABLE IF NOT EXISTS living_room_actions (
-    id            INT AUTO_INCREMENT PRIMARY KEY,
-    id_node       VARCHAR(100)    NOT NULL,               -- referencia a nodes.id_node
-    turn_off      TINYINT(1)      NOT NULL,               -- 0/1
-    action_at     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (id_node) REFERENCES nodes(id_node) ON DELETE CASCADE
-);
 
 -- 7. Datos enviados por ESP32: puerta principal (front_door)
 CREATE TABLE IF NOT EXISTS front_door (
@@ -92,14 +84,7 @@ CREATE TABLE IF NOT EXISTS kitchen (
     FOREIGN KEY (id_node) REFERENCES nodes(id_node) ON DELETE CASCADE
 );
 
--- 9. Acciones recibidas por ESP32: cocina (kitchen_actions)
-CREATE TABLE IF NOT EXISTS kitchen_actions (
-    id            INT AUTO_INCREMENT PRIMARY KEY,
-    id_node       VARCHAR(100)    NOT NULL,
-    servo         TINYINT(1)      NOT NULL,               -- 0/1
-    action_at     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (id_node) REFERENCES nodes(id_node) ON DELETE CASCADE
-);
+
 -- 10. Logs de estado genéricos (status_logs)
 CREATE TABLE IF NOT EXISTS status_logs (
     id            INT AUTO_INCREMENT PRIMARY KEY,
@@ -129,12 +114,18 @@ SET @new_owner_id = LAST_INSERT_ID();
 INSERT INTO app_user (username, password_hash, role, first_name, last_name, email, phone)
 VALUES ('jperez_user', '$2b$12$hashDeEjemplo3', 'emergency_contact', 'Juanito', 'Pérez', 'Juanito.perez@example.com', '555-0000');
 
+INSERT INTO app_user (username, password_hash, role, first_name, last_name, email, phone) VALUES 
+('admin_user', 'admin123', 'admin', 'Nombre', 'Apellido', 'admin@example.com', '123456789');
+
+INSERT INTO nodes (id_node, location, description, owner_id)
+VALUES ('NODE_Z', 'kitchen', 'sensor to the kitchen', NULL);
+
 -- Capturar el ID del nuevo app_user
 SET @new_user_id = LAST_INSERT_ID();
 
 -- 13. Relacionar el nuevo owner con el nuevo app_user
 INSERT INTO owner_contact (owner_id, user_id)
-VALUES (@new_owner_id, @new_user_id);
+VALUES (1, 1);
 
 -- 14. Asignar el nuevo owner a todos los nodos existentes
 UPDATE nodes
