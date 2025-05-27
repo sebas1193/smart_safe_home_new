@@ -52,6 +52,8 @@ app.post('/auth', async (req, res) => {
             req.session.role = result.data.role;
             req.session.firstName = result.data.first_name;
             req.session.lastName = result.data.last_name;
+            req.session.email = result.data.email;        // AGREGAR ESTA LÍNEA
+            req.session.phone = result.data.phone;        // AGREGAR ESTA LÍNEA
  
             if (result.data.role === 'admin') { 
                 return res.redirect('/admin'); 
@@ -219,7 +221,81 @@ app.get('/user', (req, res) => {
     res.redirect('/login'); 
 });
 
+app.get('/update_user', isAuthenticated, (req, res) => {
+  res.render('update_user', {
+    user: req.session.user,
+    userId: req.session.userId,
+    firstName: req.session.firstName,
+    lastName: req.session.lastName,
+    email: req.session.email,           // AGREGAR ESTA LÍNEA
+    phone: req.session.phone,           // AGREGAR ESTA LÍNEA
+    role: req.session.role,
+    userData: req.session.userData
+  });
+});
 
+// Ruta POST para procesar la actualización
+app.post('/update_user', isAuthenticated, async (req, res) => {
+  try {
+    const { first_name, last_name, email, phone, password } = req.body;
+    
+    // Verificar que al menos un campo esté presente
+    if (!first_name && !last_name && !email && !phone && !password) {
+      return res.send('<script>alert("Please fill at least one field to update."); window.location.href="/update_user";</script>');
+    }
+    
+    // Preparar parámetros para el endpoint
+    let queryParams = `username=${encodeURIComponent(req.session.user)}&id=${req.session.userId}`;
+    
+    if (first_name && first_name.trim()) queryParams += `&first_name=${encodeURIComponent(first_name.trim())}`;
+    if (last_name && last_name.trim()) queryParams += `&last_name=${encodeURIComponent(last_name.trim())}`;
+    if (email && email.trim()) queryParams += `&email=${encodeURIComponent(email.trim())}`;
+    if (phone && phone.trim()) queryParams += `&phone=${encodeURIComponent(phone.trim())}`;
+    if (password && password.trim()) queryParams += `&password_hash=${encodeURIComponent(password.trim())}`;
+
+    console.log('Sending PUT request to:', `http://localhost:1880/edit_user?${queryParams}`);
+
+    // Llamar al endpoint PUT que creamos
+    const response = await axios.put(`http://localhost:1880/edit_user?${queryParams}`);
+    
+    console.log('Response received:', response.data);
+    
+    // Verificar que response.data existe
+    if (!response || !response.data) {
+      throw new Error('No data received from server');
+    }
+    
+    const result = response.data;
+
+    if (result && result.success) {
+      // Actualizar datos de sesión si se modificaron
+      if (first_name && first_name.trim()) req.session.firstName = first_name.trim();
+      if (last_name && last_name.trim()) req.session.lastName = last_name.trim();
+      if (email && email.trim()) req.session.email = email.trim();
+      if (phone && phone.trim()) req.session.phone = phone.trim();
+      
+      // Redirigir según el rol
+      if (req.session.role === 'admin') {
+        return res.redirect('/admin?updated=success');
+      } else {
+        return res.redirect('/user?updated=success');
+      }
+    } else {
+      const errorMessage = result && result.message ? result.message : 'Unknown error occurred';
+      return res.send(`<script>alert("Error: ${errorMessage}"); window.location.href="/update_user";</script>`);
+    }
+  } catch (error) {
+    console.error('Error updating user:', error);
+    
+    // Log more details about the error
+    if (error.response) {
+      console.error('Error response data:', error.response.data);
+      console.error('Error response status:', error.response.status);
+    }
+    
+    return res.send('<script>alert("Error updating profile. Please try again."); window.location.href="/update_user";</script>');
+  }
+});
 app.get('/create_node', isAuthenticated, (req, res) => {
   // Solo admins pueden acceder a crear nodos
   if (req.session.role !== 'admin') {
