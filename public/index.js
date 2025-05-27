@@ -219,6 +219,22 @@ app.get('/user', (req, res) => {
     res.redirect('/login'); 
 });
 
+
+app.get('/create_node', isAuthenticated, (req, res) => {
+  // Solo admins pueden acceder a crear nodos
+  if (req.session.role !== 'admin') {
+    return res.redirect('/login');
+  }
+
+  res.render('create_node', {
+    user: req.session.user,
+    userId: req.session.userId,
+    firstName: req.session.firstName,
+    lastName: req.session.lastName,
+    role: req.session.role,
+    userData: req.session.userData
+  });
+});
 app.get('/log_out', (req, res) => {
     // Destruir la sesión actual
     req.session.destroy((err) => {
