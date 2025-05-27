@@ -1,240 +1,892 @@
 <%- include("partials/header") %>
 <%- include("partials/nav_logout") %>
 
-<div class="container mt-5">
-  <div class="row">
-    <div class="col-md-6 mb-4">
-      <div class="card">
+<div class="container-fluid mt-4">
+  <!-- User Info Row -->
+  <div class="row mb-4">
+    <!-- User Profile Card -->
+    <div class="col-lg-8 col-md-7">
+      <div class="card user-profile-card">
         <div class="card-header bg-primary text-white">
-          <h2 class="mb-0">Emergency Contact Dashboard</h2>
+          <h4 class="mb-0">
+            <i class="fas fa-user-shield"></i> Emergency Contact Dashboard
+          </h4>
         </div>
-        <div class="card-body">
-          <p class="lead">Welcome, <strong><%= firstName %> <%= lastName %></strong></p>
-          <div class="row">
-            <div class="col-sm-6">
-              <ul class="list-group list-group-flush">
-                <li class="list-group-item"><strong>ID:</strong> <%= userId %></li>
-                <li class="list-group-item"><strong>Username:</strong> <%= user %></li>
-              </ul>
+        <div class="card-body text-center">
+          <!-- User Avatar -->
+          <div class="user-avatar mb-3">
+            <i class="fas fa-user-circle"></i>
+          </div>
+          
+          <!-- User Info -->
+          <h5 class="user-name"><%= firstName %> <%= lastName %></h5>
+          <p class="user-role">
+            <span class="badge badge-info"><%= role %></span>
+          </p>
+          
+          <div class="user-details">
+            <div class="detail-item">
+              <i class="fas fa-id-badge"></i>
+              <span>ID: <%= userId %></span>
             </div>
-            <div class="col-sm-6">
-              <ul class="list-group list-group-flush">
-                <li class="list-group-item"><strong>Role:</strong> <%= role %></li>
-                <li class="list-group-item"><strong>Full Name:</strong> <%= firstName %> <%= lastName %></li>
-              </ul>
+            <div class="detail-item">
+              <i class="fas fa-user"></i>
+              <span>@<%= user %></span>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="col-md-6">
-      <div class="card">
+    <!-- Linked Owners Stats Card -->
+    <div class="col-lg-4 col-md-5">
+      <div class="card stats-card">
         <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-          <h4 class="mb-0">Linked House Owners</h4>
+          <h5 class="mb-0">
+            <i class="fas fa-home"></i> Monitoring
+          </h5>
           <a href="/sign_up_owner" class="btn btn-light btn-sm" title="Add new owner">
             <i class="fas fa-plus"></i>
           </a>
         </div>
+        <div class="card-body text-center">
+          <div class="stat-number" id="totalOwnersCount">
+            0
+          </div>
+          <div class="stat-label">
+            Linked House Owners
+          </div>
+          <div class="stat-icon">
+            <i class="fas fa-users"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
+  <!-- Linked House Owners Section -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+          <h4 class="mb-0">
+            <i class="fas fa-home"></i> Linked House Owners
+          </h4>
+          <div class="d-flex align-items-center">
+            <span class="badge badge-light me-2" id="displayedOwners">Showing: 0</span>
+            <button class="btn btn-light btn-sm" onclick="refreshOwners()">
+              <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+          </div>
+        </div>
         <div class="card-body">
-          <div id="owners-list" class="row g-3">
-            </div>
-          <nav aria-label="Owners pagination" class="mt-3">
-            <ul id="owners-pagination" class="pagination justify-content-center mb-0">
-              </ul>
+          <!-- Owners Container -->
+          <div id="owners-list" class="row">
+            <!-- Los owners se cargarán aquí dinámicamente -->
+          </div>
+
+          <!-- Owners Pagination -->
+          <nav aria-label="Owners pagination" class="mt-4">
+            <ul id="owners-pagination" class="pagination justify-content-center">
+              <!-- La paginación se generará dinámicamente -->
+            </ul>
           </nav>
         </div>
       </div>
     </div>
   </div>
 
-  <div id="owner-logs-section" class="mt-5 d-none">
-    <h4>Owner Status Logs</h4>
-    <ul id="logs-list" class="list-group"></ul>
-    <nav aria-label="Owner logs pagination" class="mt-3">
-      <ul id="logs-pagination" class="pagination justify-content-center mb-0">
-        </ul>
-    </nav>
+  <!-- Owner Status Logs Section -->
+  <div id="owner-logs-section" class="mt-4 d-none">
+    <div class="card">
+      <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">
+          <i class="fas fa-chart-line"></i> Owner Status Logs
+        </h4>
+        <div class="d-flex align-items-center">
+          <span class="badge badge-dark me-2" id="currentOwnerName">Owner</span>
+          <button class="btn btn-dark btn-sm" onclick="hideLogs()">
+            <i class="fas fa-times"></i> Close
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        <!-- Filter Buttons -->
+        <div class="filter-section mb-3">
+          <strong>Filter by Status:</strong>
+          <div class="btn-group ms-2" role="group">
+            <button type="button" class="btn btn-outline-secondary logs-filter-btn active" data-filter="all">
+              <i class="fas fa-list"></i> All
+            </button>
+            <button type="button" class="btn btn-outline-success logs-filter-btn" data-filter="normal">
+              <i class="fas fa-check-circle"></i> Normal (0-1)
+            </button>
+            <button type="button" class="btn btn-outline-warning logs-filter-btn" data-filter="warning">
+              <i class="fas fa-exclamation-triangle"></i> Warning (2-3)
+            </button>
+            <button type="button" class="btn btn-outline-danger logs-filter-btn" data-filter="critical">
+              <i class="fas fa-times-circle"></i> Critical (4-5)
+            </button>
+          </div>
+        </div>
+
+        <!-- Logs Container -->
+        <div id="logs-container" class="row">
+          <!-- Los logs se cargarán aquí dinámicamente -->
+        </div>
+
+        <!-- Logs Pagination -->
+        <nav aria-label="Owner logs pagination" class="mt-4">
+          <ul id="logs-pagination" class="pagination justify-content-center">
+            <!-- La paginación se generará dinámicamente -->
+          </ul>
+        </nav>
+      </div>
+    </div>
   </div>
 </div>
 
-<%- include("partials/footer") %>
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="loading-overlay d-none">
+  <div class="loading-content">
+    <div class="spinner-border text-primary" role="status"></div>
+  </div>
+</div>
+
+<style>
+/* User Profile Card Styles */
+.user-profile-card {
+  height: 280px;
+}
+
+.user-avatar {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, #007bff, #0056b3);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.user-avatar i {
+  font-size: 2.5rem;
+  color: white;
+}
+
+.user-name {
+  color: #333;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.user-role {
+  margin-bottom: 20px;
+}
+
+.user-details {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.detail-item i {
+  font-size: 1.2rem;
+  margin-bottom: 5px;
+  color: #007bff;
+}
+
+/* Stats Card Styles */
+.stats-card {
+  height: 280px;
+}
+
+.stat-number {
+  font-size: 3rem;
+  font-weight: bold;
+  color: #17a2b8;
+  margin-bottom: 10px;
+}
+
+.stat-label {
+  font-size: 1.1rem;
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.stat-icon {
+  font-size: 2rem;
+  color: #17a2b8;
+  opacity: 0.7;
+}
+
+/* Owner Card Styles */
+.owner-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.owner-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.owner-card .card-body {
+  padding: 1rem;
+}
+
+.owner-info {
+  flex-grow: 1;
+}
+
+.owner-id {
+  font-weight: bold;
+  color: #007bff;
+  font-size: 0.9rem;
+}
+
+.owner-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+  margin: 5px 0;
+}
+
+.owner-actions {
+  display: flex;
+  gap: 5px;
+}
+
+/* Filter Section */
+.filter-section {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.logs-filter-btn {
+  margin: 0 2px;
+  transition: all 0.3s ease;
+}
+
+.logs-filter-btn.active {
+  background-color: #007bff;
+  border-color: #007bff;
+  color: white;
+}
+
+.logs-filter-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* Log Card Styles (same as admin) */
+.log-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.log-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.log-card-normal {
+  background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+  border-left: 4px solid #28a745;
+}
+
+.log-card-warning {
+  background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+  border-left: 4px solid #ffc107;
+}
+
+.log-card-critical {
+  background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+  border-left: 4px solid #dc3545;
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.log-node {
+  font-weight: bold;
+  font-size: 1.1em;
+}
+
+.log-time {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.log-location {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.8em;
+  font-weight: 500;
+  margin-bottom: 5px;
+}
+
+.log-description {
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.loading-content {
+  background: transparent;
+  padding: 1rem;
+  text-align: center;
+}
+
+.loading-content .spinner-border {
+  width: 3rem;
+  height: 3rem;
+}
+
+/* Utility Classes */
+.me-2 {
+  margin-right: 0.5rem !important;
+}
+
+.ms-2 {
+  margin-left: 0.5rem !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .user-details {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .detail-item {
+    flex-direction: row;
+    gap: 5px;
+  }
+  
+  .filter-section {
+    text-align: center;
+  }
+  
+  .filter-section .btn-group {
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  
+  .stat-number {
+    font-size: 2.5rem;
+  }
+}
+
+@media (max-width: 576px) {
+  .user-profile-card,
+  .stats-card {
+    height: auto;
+    margin-bottom: 15px;
+  }
+  
+  .owner-card .card-body {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .owner-actions {
+    margin-top: 10px;
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+</style>
 
 <script>
-  const username = '<%= user %>';
-  const userId = '<%= userId %>'; // Asegúrate de que userId esté disponible en tu contexto EJS
-  const ownersEndpoint = `http://localhost:1880/n_owner_house?username=${encodeURIComponent(username)}`;
-  let owners = [];
-  const ownersPageSize = 5;
-  let ownersCurrentPage = 1;
+// Variables globales
+const username = '<%= user %>';
+const userId = '<%= userId %>';
+const ownersEndpoint = `http://localhost:1880/n_owner_house?username=${encodeURIComponent(username)}`;
 
-  let logsData = [];
-  const logsPageSize = 5;
-  let logsCurrentPage = 1;
-  let currentOwnerId = null;
+let owners = [];
+const ownersPageSize = 6;
+let ownersCurrentPage = 1;
 
-  async function fetchOwners() {
-    try {
-      const res = await fetch(ownersEndpoint);
-      const json = await res.json();
-      if (json.success && Array.isArray(json.data)) {
-        owners = json.data;
-        renderOwnersPage(1);
-        renderOwnersPagination();
-      } else {
-        console.error('Failed to load owners', json.message);
-      }
-    } catch (err) {
-      console.error('Error fetching owners', err);
-    }
+let logsData = [];
+let filteredLogs = [];
+const logsPageSize = 6;
+let logsCurrentPage = 1;
+let currentOwnerId = null;
+let currentOwnerName = '';
+let currentLogsFilter = 'all';
+
+// Funciones de utilidad para logs (mismas que admin)
+function getLogCardClass(statusAlert) {
+  if (statusAlert === 0 || statusAlert === 1) return 'log-card-normal';
+  if (statusAlert === 2 || statusAlert === 3) return 'log-card-warning';
+  if (statusAlert === 4 || statusAlert === 5) return 'log-card-critical';
+  return 'log-card-normal';
+}
+
+function getLocationIcon(location) {
+  switch(location) {
+    case 'kitchen': return 'fas fa-utensils';
+    case 'living_room': return 'fas fa-couch';
+    case 'front_door': return 'fas fa-door-open';
+    default: return 'fas fa-home';
   }
+}
 
-  function renderOwnersPage(page) {
-    ownersCurrentPage = page;
-    const listDiv = document.getElementById('owners-list');
-    listDiv.innerHTML = '';
-    const start = (page - 1) * ownersPageSize;
-    const pageOwners = owners.slice(start, start + ownersPageSize);
+function formatDate(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
 
-    pageOwners.forEach(owner => {
-      const col = document.createElement('div');
-      col.className = 'col-12';
-      col.innerHTML = `
-        <div class="card mb-2">
-          <div class="card-body d-flex justify-content-between align-items-center">
-            <div>
-              <p class="mb-1"><strong>ID:</strong> ${owner.id}</p>
-              <p class="mb-0"><strong>Full Name:</strong> ${owner.first_name} ${owner.last_name}</p>
-            </div>
-            <div class="btn-group" role="group">
-              <button class="btn btn-outline-primary view-logs-btn" data-owner-id="${owner.id}" title="View Status Logs">
-                <i class="fas fa-list-alt"></i>
-              </button>
-              <a href="/owner_info_contact?id_owner=${owner.id}" class="btn btn-outline-secondary" title="More Info">
-                <i class="fas fa-info-circle"></i>
-              </a>
-            </div>
+// Función para obtener owners
+async function fetchOwners() {
+  try {
+    const res = await fetch(ownersEndpoint);
+    const json = await res.json();
+    if (json.success && Array.isArray(json.data)) {
+      owners = json.data;
+      document.getElementById('totalOwnersCount').textContent = owners.length;
+      renderOwnersPage(1);
+      renderOwnersPagination();
+    } else {
+      console.error('Failed to load owners', json.message);
+      owners = [];
+      document.getElementById('totalOwnersCount').textContent = '0';
+    }
+  } catch (err) {
+    console.error('Error fetching owners', err);
+    owners = [];
+    document.getElementById('totalOwnersCount').textContent = '0';
+  }
+}
+
+// Función para renderizar owners
+function renderOwnersPage(page) {
+  ownersCurrentPage = page;
+  const container = document.getElementById('owners-list');
+  container.innerHTML = '';
+  
+  const start = (page - 1) * ownersPageSize;
+  const pageOwners = owners.slice(start, start + ownersPageSize);
+  
+  if (pageOwners.length === 0) {
+    container.innerHTML = `
+      <div class="col-12">
+        <div class="alert alert-info text-center">
+          <i class="fas fa-info-circle"></i> No house owners linked yet. 
+          <a href="/sign_up_owner" class="alert-link">Add your first owner</a>
+        </div>
+      </div>
+    `;
+    return;
+  }
+  
+  pageOwners.forEach(owner => {
+    const col = document.createElement('div');
+    col.className = 'col-lg-4 col-md-6 col-12';
+    
+    col.innerHTML = `
+      <div class="card owner-card">
+        <div class="card-body d-flex justify-content-between align-items-center">
+          <div class="owner-info">
+            <div class="owner-id">ID: ${owner.id}</div>
+            <div class="owner-name">${owner.first_name} ${owner.last_name}</div>
+          </div>
+          <div class="owner-actions">
+            <button class="btn btn-outline-primary btn-sm view-logs-btn" data-owner-id="${owner.id}" data-owner-name="${owner.first_name} ${owner.last_name}" title="View Status Logs">
+              <i class="fas fa-list-alt"></i>
+            </button>
+            <a href="/owner_info_contact?id_owner=${owner.id}" class="btn btn-outline-secondary btn-sm" title="More Info">
+              <i class="fas fa-info-circle"></i>
+            </a>
           </div>
         </div>
-      `;
-      listDiv.appendChild(col);
+      </div>
+    `;
+    
+    container.appendChild(col);
+  });
+  
+  // Event listeners para botones
+  container.querySelectorAll('.view-logs-btn').forEach(button => {
+    button.addEventListener('click', function() {
+      const ownerId = this.dataset.ownerId;
+      const ownerName = this.dataset.ownerName;
+      currentOwnerId = ownerId;
+      currentOwnerName = ownerName;
+      fetchOwnerLogs(userId, ownerId);
     });
+  });
+  
+  // Actualizar contador
+  document.getElementById('displayedOwners').textContent = `Showing: ${pageOwners.length} of ${owners.length}`;
+}
 
-    // Attach event listeners to the new buttons
-    listDiv.querySelectorAll('.view-logs-btn').forEach(button => {
-      button.addEventListener('click', function() {
-        const ownerId = this.dataset.ownerId;
-        currentOwnerId = ownerId;
-        fetchOwnerLogs(userId, ownerId);
-      });
-    });
+// Función para renderizar paginación de owners (igual que admin)
+function renderOwnersPagination() {
+  const totalPages = Math.ceil(owners.length / ownersPageSize);
+  const pagination = document.getElementById('owners-pagination');
+  pagination.innerHTML = '';
+  
+  if (totalPages <= 1) return;
+  
+  const maxPagesToShow = 10;
+  let startPage = Math.max(1, ownersCurrentPage - Math.floor(maxPagesToShow / 2));
+  let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+  
+  if (endPage - startPage + 1 < maxPagesToShow) {
+    startPage = Math.max(1, endPage - maxPagesToShow + 1);
   }
-
-  function renderOwnersPagination() {
-    const totalPages = Math.ceil(owners.length / ownersPageSize);
-    const pagUL = document.getElementById('owners-pagination');
-    pagUL.innerHTML = '';
-    for (let i = 1; i <= totalPages; i++) {
-      const li = document.createElement('li');
-      li.className = `page-item ${i === ownersCurrentPage ? 'active' : ''}`;
-      li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
-      pagUL.appendChild(li);
-    }
-    pagUL.querySelectorAll('a.page-link').forEach(link => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        const page = parseInt(e.target.dataset.page);
-        renderOwnersPage(page);
-        renderOwnersPagination();
-      });
-    });
-  }
-
-  async function fetchOwnerLogs(userId, ownerId) {
-    try {
-      const logsEndpoint = `/status_logs_owner?user_id=${userId}&owner_id=${ownerId}`;
-      const res = await fetch(logsEndpoint);
-      const json = await res.json();
-      if (json.success && Array.isArray(json.data)) {
-        logsData = json.data;
-        renderLogsPage(1);
-        renderLogsPagination();
-        document.getElementById('owner-logs-section').classList.remove('d-none');
-        document.getElementById('owner-logs-section').scrollIntoView({ behavior: 'smooth' });
-      } else {
-        console.error('Failed to load logs', json.message);
-        document.getElementById('owner-logs-section').classList.add('d-none');
-      }
-    } catch (err) {
-      console.error('Error fetching logs', err);
-      document.getElementById('owner-logs-section').classList.add('d-none');
-    }
-  }
-
-  function renderLogsPage(page) {
-    logsCurrentPage = page;
-    const list = document.getElementById('logs-list');
-    list.innerHTML = '';
-    const start = (page - 1) * logsPageSize;
-    const pageLogs = logsData.slice(start, start + logsPageSize);
-
-    pageLogs.forEach(log => {
-      let itemClass = 'list-group-item';
-      if (log.status_alert === 0 || log.status_alert === 1) {
-        itemClass += ' list-group-item-success';
-      } else if (log.status_alert === 2 || log.status_alert === 3) {
-        itemClass += ' list-group-item-warning';
-      } else if (log.status_alert === 4 || log.status_alert === 5) {
-        itemClass += ' list-group-item-danger';
-      }
-
-      const li = document.createElement('li');
-      li.className = itemClass;
-      li.innerHTML = `
-        <strong>${new Date(log.recorded_at).toLocaleString()}</strong><br>
-        <span class="text-muted">Nodo:</span> ${log.id_node} |
-        <span class="text-muted">Ubicación:</span> ${log.location} |
-        <span class="text-muted">Estado:</span> ${log.description}
-      `;
-      list.appendChild(li);
-    });
-  }
-
-  function renderLogsPagination() {
-    const totalPages = Math.ceil(logsData.length / logsPageSize);
-    const pagUL = document.getElementById('logs-pagination');
-    pagUL.innerHTML = '';
-
-    if (totalPages > 1) {
-      for (let i = 1; i <= totalPages; i++) {
-        const li = document.createElement('li');
-        li.className = `page-item ${i === logsCurrentPage ? 'active' : ''}`;
-        li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
-        li.addEventListener('click', e => {
-          e.preventDefault();
-          const page = parseInt(e.target.dataset.page);
-          renderLogsPage(page);
-          renderLogsPagination();
-        });
-        pagUL.appendChild(li);
-      }
+  
+  // Botón anterior
+  const prevLi = document.createElement('li');
+  prevLi.className = `page-item ${ownersCurrentPage === 1 ? 'disabled' : ''}`;
+  prevLi.innerHTML = `<a class="page-link" href="#" onclick="changeOwnersPage(${ownersCurrentPage - 1})">‹</a>`;
+  pagination.appendChild(prevLi);
+  
+  // Primera página
+  if (startPage > 1) {
+    const firstLi = document.createElement('li');
+    firstLi.className = 'page-item';
+    firstLi.innerHTML = `<a class="page-link" href="#" onclick="changeOwnersPage(1)">1</a>`;
+    pagination.appendChild(firstLi);
+    
+    if (startPage > 2) {
+      const dotsLi = document.createElement('li');
+      dotsLi.className = 'page-item disabled';
+      dotsLi.innerHTML = `<span class="page-link">...</span>`;
+      pagination.appendChild(dotsLi);
     }
   }
-
-  function getQueryParam(key) {
-    const params = new URLSearchParams(window.location.search);
-    return params.get(key);
+  
+  // Páginas en el rango
+  for (let i = startPage; i <= endPage; i++) {
+    const li = document.createElement('li');
+    li.className = `page-item ${i === ownersCurrentPage ? 'active' : ''}`;
+    li.innerHTML = `<a class="page-link" href="#" onclick="changeOwnersPage(${i})">${i}</a>`;
+    pagination.appendChild(li);
   }
+  
+  // Última página
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) {
+      const dotsLi = document.createElement('li');
+      dotsLi.className = 'page-item disabled';
+      dotsLi.innerHTML = `<span class="page-link">...</span>`;
+      pagination.appendChild(dotsLi);
+    }
+    
+    const lastLi = document.createElement('li');
+    lastLi.className = 'page-item';
+    lastLi.innerHTML = `<a class="page-link" href="#" onclick="changeOwnersPage(${totalPages})">${totalPages}</a>`;
+    pagination.appendChild(lastLi);
+  }
+  
+  // Botón siguiente
+  const nextLi = document.createElement('li');
+  nextLi.className = `page-item ${ownersCurrentPage === totalPages ? 'disabled' : ''}`;
+  nextLi.innerHTML = `<a class="page-link" href="#" onclick="changeOwnersPage(${ownersCurrentPage + 1})">›</a>`;
+  pagination.appendChild(nextLi);
+}
 
-  document.addEventListener('DOMContentLoaded', async () => {
+// Función para cambiar página de owners
+function changeOwnersPage(page) {
+  const totalPages = Math.ceil(owners.length / ownersPageSize);
+  if (page < 1 || page > totalPages) return;
+  
+  renderOwnersPage(page);
+  renderOwnersPagination();
+}
+
+// Función para obtener logs del owner
+async function fetchOwnerLogs(userId, ownerId) {
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  loadingOverlay.classList.remove('d-none');
+  
+  try {
+    const logsEndpoint = `/status_logs_owner?user_id=${userId}&owner_id=${ownerId}`;
+    const res = await fetch(logsEndpoint);
+    const json = await res.json();
+    
+    if (json.success && Array.isArray(json.data)) {
+      logsData = json.data;
+      filterLogs('all');
+      document.getElementById('currentOwnerName').textContent = currentOwnerName;
+      document.getElementById('owner-logs-section').classList.remove('d-none');
+      document.getElementById('owner-logs-section').scrollIntoView({ behavior: 'smooth' });
+    } else {
+      console.error('Failed to load logs', json.message);
+      alert('No logs found for this owner');
+    }
+  } catch (err) {
+    console.error('Error fetching logs', err);
+    alert('Error loading logs');
+  } finally {
+    loadingOverlay.classList.add('d-none');
+  }
+}
+
+// Funciones de logs (iguales que admin)
+function filterLogs(filterType) {
+  currentLogsFilter = filterType;
+  
+  if (filterType === 'all') {
+    filteredLogs = [...logsData];
+  } else if (filterType === 'normal') {
+    filteredLogs = logsData.filter(log => log.status_alert === 0 || log.status_alert === 1);
+  } else if (filterType === 'warning') {
+    filteredLogs = logsData.filter(log => log.status_alert === 2 || log.status_alert === 3);
+  } else if (filterType === 'critical') {
+    filteredLogs = logsData.filter(log => log.status_alert === 4 || log.status_alert === 5);
+  }
+  
+  // Actualizar botones activos
+  document.querySelectorAll('.logs-filter-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  document.querySelector(`[data-filter="${filterType}"]`).classList.add('active');
+  
+  logsCurrentPage = 1;
+  renderLogsPage(1);
+  renderLogsPagination();
+}
+
+function renderLogsPage(page) {
+  logsCurrentPage = page;
+  const container = document.getElementById('logs-container');
+  container.innerHTML = '';
+  
+  const startIndex = (page - 1) * logsPageSize;
+  const endIndex = startIndex + logsPageSize;
+  const pageLogs = filteredLogs.slice(startIndex, endIndex);
+  
+  if (pageLogs.length === 0) {
+    container.innerHTML = `
+      <div class="col-12">
+        <div class="alert alert-info text-center">
+          <i class="fas fa-info-circle"></i> No logs available for the selected filter.
+        </div>
+      </div>
+    `;
+    return;
+  }
+  
+  pageLogs.forEach(log => {
+    const cardClass = getLogCardClass(log.status_alert);
+    const locationIcon = getLocationIcon(log.location);
+    
+    const col = document.createElement('div');
+    col.className = 'col-lg-4 col-md-6 col-12';
+    
+    col.innerHTML = `
+      <div class="card log-card ${cardClass}" onclick="showLogDetails(${log.id})">
+        <div class="card-body">
+          <div class="log-header">
+            <div class="log-node">
+              <i class="fas fa-microchip"></i> ${log.id_node}
+            </div>
+            <div class="log-time">
+              <i class="fas fa-clock"></i> ${formatDate(log.recorded_at)}
+            </div>
+          </div>
+          
+          <div class="log-location bg-light text-dark">
+            <i class="${locationIcon}"></i> ${log.location.replace('_', ' ')}
+          </div>
+          
+          <div class="log-description">
+            ${log.description}
+          </div>
+          
+          <div class="mt-2">
+            <span class="badge ${log.status_alert <= 1 ? 'badge-success' : log.status_alert <= 3 ? 'badge-warning' : 'badge-danger'}">
+              Alert Level: ${log.status_alert}
+            </span>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    container.appendChild(col);
+  });
+}
+
+function renderLogsPagination() {
+  const totalPages = Math.ceil(filteredLogs.length / logsPageSize);
+  const pagination = document.getElementById('logs-pagination');
+  pagination.innerHTML = '';
+  
+  if (totalPages <= 1) return;
+  
+  const maxPagesToShow = 10;
+  let startPage = Math.max(1, logsCurrentPage - Math.floor(maxPagesToShow / 2));
+  let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+  
+  if (endPage - startPage + 1 < maxPagesToShow) {
+    startPage = Math.max(1, endPage - maxPagesToShow + 1);
+  }
+  
+  // Botón anterior
+  const prevLi = document.createElement('li');
+  prevLi.className = `page-item ${logsCurrentPage === 1 ? 'disabled' : ''}`;
+  prevLi.innerHTML = `<a class="page-link" href="#" onclick="changeLogsPage(${logsCurrentPage - 1})">‹</a>`;
+  pagination.appendChild(prevLi);
+  
+  // Primera página
+  if (startPage > 1) {
+    const firstLi = document.createElement('li');
+    firstLi.className = 'page-item';
+    firstLi.innerHTML = `<a class="page-link" href="#" onclick="changeLogsPage(1)">1</a>`;
+    pagination.appendChild(firstLi);
+    
+    if (startPage > 2) {
+      const dotsLi = document.createElement('li');
+      dotsLi.className = 'page-item disabled';
+      dotsLi.innerHTML = `<span class="page-link">...</span>`;
+      pagination.appendChild(dotsLi);
+    }
+  }
+  
+  // Páginas en el rango
+  for (let i = startPage; i <= endPage; i++) {
+    const li = document.createElement('li');
+    li.className = `page-item ${i === logsCurrentPage ? 'active' : ''}`;
+    li.innerHTML = `<a class="page-link" href="#" onclick="changeLogsPage(${i})">${i}</a>`;
+    pagination.appendChild(li);
+  }
+  
+  // Última página
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) {
+      const dotsLi = document.createElement('li');
+      dotsLi.className = 'page-item disabled';
+      dotsLi.innerHTML = `<span class="page-link">...</span>`;
+      pagination.appendChild(dotsLi);
+    }
+    
+    const lastLi = document.createElement('li');
+    lastLi.className = 'page-item';
+    lastLi.innerHTML = `<a class="page-link" href="#" onclick="changeLogsPage(${totalPages})">${totalPages}</a>`;
+    pagination.appendChild(lastLi);
+  }
+  
+  // Botón siguiente
+  const nextLi = document.createElement('li');
+  nextLi.className = `page-item ${logsCurrentPage === totalPages ? 'disabled' : ''}`;
+  nextLi.innerHTML = `<a class="page-link" href="#" onclick="changeLogsPage(${logsCurrentPage + 1})">›</a>`;
+  pagination.appendChild(nextLi);
+}
+
+function changeLogsPage(page) {
+  const totalPages = Math.ceil(filteredLogs.length / logsPageSize);
+  if (page < 1 || page > totalPages) return;
+  
+  renderLogsPage(page);
+  renderLogsPagination();
+}
+
+function showLogDetails(logId) {
+  const log = logsData.find(l => l.id === logId);
+  if (!log) return;
+  
+  alert(`Log Details:\n\nNode: ${log.id_node}\nLocation: ${log.location}\nAlert Level: ${log.status_alert}\nDescription: ${log.description}\nRecorded: ${new Date(log.recorded_at).toLocaleString()}`);
+}
+
+// Función para refrescar owners
+async function refreshOwners() {
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  loadingOverlay.classList.remove('d-none');
+  
+  try {
     await fetchOwners();
+  } catch (error) {
+    console.error('Error refreshing owners:', error);
+    alert('Error refreshing owners');
+  } finally {
+    loadingOverlay.classList.add('d-none');
+  }
+}
 
-    // Check if owner_id is in the query parameters on load
-    const initialOwnerId = getQueryParam('owner_id');
-    if (initialOwnerId) {
+// Función para ocultar logs
+function hideLogs() {
+  document.getElementById('owner-logs-section').classList.add('d-none');
+  currentOwnerId = null;
+  currentOwnerName = '';
+  logsData = [];
+  filteredLogs = [];
+}
+
+// Función para obtener parámetros de query
+function getQueryParam(key) {
+  const params = new URLSearchParams(window.location.search);
+  return params.get(key);
+}
+
+// Inicialización
+document.addEventListener('DOMContentLoaded', async () => {
+  // Cargar owners
+  await fetchOwners();
+  
+  // Event listeners para filtros de logs
+  document.querySelectorAll('.logs-filter-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const filter = this.dataset.filter;
+      filterLogs(filter);
+    });
+  });
+  
+  // Verificar si hay owner_id en los parámetros de URL
+  const initialOwnerId = getQueryParam('owner_id');
+  if (initialOwnerId && owners.length > 0) {
+    const owner = owners.find(o => o.id == initialOwnerId);
+    if (owner) {
       currentOwnerId = initialOwnerId;
+      currentOwnerName = `${owner.first_name} ${owner.last_name}`;
       fetchOwnerLogs(userId, initialOwnerId);
     }
-  });
+  }
+});
 </script>
+
+<%- include("partials/footer") %>
